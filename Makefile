@@ -3,7 +3,8 @@
 #-------------------------------------------------------------------------------
 # FC= ifort -assume byterecl 
 FC= gfortran
-FFLAGS= -g -O3
+# FFLAGS= -g -O3
+FFLAGS= -g -O3 -Wall -Wextra -Wconversion -fbacktrace -fbounds-check
 # FFLAGS= -g -O3 -heap-arrays -check bounds -g -traceback
 MAKE = make
 

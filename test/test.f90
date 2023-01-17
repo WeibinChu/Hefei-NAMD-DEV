@@ -1,9 +1,8 @@
 program test
     implicit none
-    complex :: a = (1,0)
-    real :: x
-    character(len=256) :: out_fmt
-    write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f9.4))" )' )  10
+    complex :: a = (2,-1), b = (3, -2)
+    real, dimension(3) :: x = [1,2,3]
+    character(len=48) :: out = '(2(F11.7,SP,F9.6,"i"))'
 
-    write(*,*) out_fmt
+    write(*,out) a,b
 end program test

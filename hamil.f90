@@ -75,20 +75,15 @@ contains
         allocate(ks%sh_prop(N, inp%NAMDTIME))
         allocate(ks%sh_prob(N, N, inp%NAMDTIME-1))
         allocate(ks%Bkm(N))
-        ks%psi_a = con%cero
-        ks%psi_a(inp%INIBAND, 1) = con%uno
-        ks%pop_a = 0.0_q 
-        ks%pop_a(inp%INIBAND, 1) = 1.0_q
-        ks%sh_pops = 0.0_q
-        ks%sh_prop = 0.0_q
-        ks%sh_prob = 0.0_q
       case ('DISH')
         allocate(ks%dish_pops(N, inp%NAMDTIME))
         allocate(ks%recom_pops(N,inp%NAMDTIME))
-        ks%dish_pops = 0.0_q
-        ks%recom_pops = 0.0_q
       case default !! should be check in fileio.f90
       end select
+
+      ! Now copy olap%eig&Dij => ks%eig%Dij
+      ks%eigKs = olap%Eig
+      ks%NAcoup = olap%Dij / (2*inp%POTIM)
 
       ks%LALLO = .TRUE.
     end if
@@ -97,9 +92,19 @@ contains
     ks%psi_c = con%cero
     ks%psi_c(inp%INIBAND) = con%uno
 
-    ! Now copy olap%eig&Dij => ks%eig%Dij
-    ks%eigKs = olap%Eig
-    ks%NAcoup = olap%Dij / (2*inp%POTIM)
+    select case (inp%ALGO)
+    case ('FSSH')
+      ks%psi_a = con%cero
+      ks%psi_a(inp%INIBAND, 1) = con%uno
+      ks%pop_a = 0.0_q 
+      ks%pop_a(inp%INIBAND, 1) = 1.0_q
+      ks%sh_pops = 0.0_q
+      ks%sh_prop = 0.0_q
+      ks%sh_prob = 0.0_q
+    case ('DISH')
+      ks%dish_pops = 0.0_q
+      ks%recom_pops = 0.0_q
+    end select
 
   end subroutine
 
@@ -121,11 +126,13 @@ contains
     if (TELE <= (inp%NELM / 2)) then
       ks%ham_c(:,:) = interpolate((TELE + inp%NELM/2 - 0.5_q) / inp%NELM, &
                                           ks%NAcoup(:,:,RTIME-1), ks%NAcoup(:,:,RTIME))
+      ! ks%ham_c(:,:) = ks%NAcoup(:,:,RTIME)
       ! ks%ham_c(:,:) = ks%NAcoup(:,:,RTIME - 1) + (ks%NAcoup(:,:,RTIME) - &
       !               & ks%NAcoup(:,:,RTIME-1)) * (TELE+inp%NELM/2 - 0.5_q) / inp%NELM
     else 
       ks%ham_c(:,:) = interpolate((TELE - inp%NELM/2 - 0.5_q) / inp%NELM, &
                                           ks%NAcoup(:,:,RTIME), ks%NAcoup(:,:,XTIME))
+      ! ks%ham_c(:,:) = ks%NAcoup(:,:,RTIME)
       ! ks%ham_c(:,:) = ks%NAcoup(:,:,RTIME ) + (ks%NAcoup(:,:,XTIME) - &
       !               & ks%NAcoup(:,:,RTIME)) * (TELE-inp%NELM/2 - 0.5_q ) / inp%NELM
     end if
@@ -137,6 +144,7 @@ contains
     do i=1, ks%ndim
       ks%ham_c(i,i) = interpolate((TELE - 0.5_q) / inp%NELM, &
                                   ks%eigKs(i,RTIME), ks%eigKs(i,XTIME))
+      ! ks%ham_c(i,i) = ks%eigKs(i,RTIME)
       ! ks%ham_c(i,i) = ks%eigKs(i,RTIME) +  (ks%eigKs(i,XTIME) - ks%eigKs(i,RTIME)) * (TELE - 0.5_q) / inp%NELM
     end do
 

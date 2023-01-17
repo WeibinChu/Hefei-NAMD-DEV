@@ -244,7 +244,7 @@ contains
     character(len=48) :: out_fmt
 
     write(buf, *) inp%NAMDTINI
-    write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f9.4))" )' )  ks%ndim
+    write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  ks%ndim
 
     open(unit=24, file='SHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
     open(unit=28, file='RECOMB.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
