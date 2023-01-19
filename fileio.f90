@@ -81,7 +81,7 @@ contains
       integer :: nsample   
 
       integer :: nacbasis  = 100
-      integer :: nacele = 1
+      integer :: nacele    = 1
 
       integer :: namdtime  = 0
       real(kind=q) :: potim= 1.0_q

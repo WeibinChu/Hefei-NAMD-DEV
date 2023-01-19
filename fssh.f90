@@ -6,7 +6,7 @@ module fssh
   use TimeProp
   implicit none
 
-  private :: whichToHop, calcprop, calcProb
+  private :: whichToHop, calcProb, calcProbwithDBC
 
   contains
 
@@ -23,75 +23,21 @@ module fssh
     which = 0
     call random_number(r)
 
-
-    lower = 0
-    ! upper = ks%sh_prop(1, indion+1)
-    upper = ks%sh_prob(1, cstat, indion)
     do i=1, ks%ndim
+      if (i == 1) then
+        lower = 0
+        ! upper = ks%sh_prop(i, indion+1)
+        upper = ks%sh_prob(i, cstat, indion)
+      else
+        lower = upper
+        ! upper = upper + ks%sh_prop(i, indion+1)
+        upper = upper + ks%sh_prob(i, cstat, indion)
+      end if
       if (lower <= r .AND. r < upper) then
         which = i
         exit
       end if
-      lower = upper
-      ! upper = upper + ks%sh_prop(i, indion+1)
-      upper = upper + ks%sh_prob(i, cstat, indion)
     end do
-
-  end subroutine
-
-  subroutine calcprop(tion, indion, cstat, ks)
-    implicit none
-
-    type(TDKS), intent(inout) :: ks
-    integer, intent(in) :: tion, indion
-    integer, intent(in) :: cstat
-
-    integer :: i, j
-    real(kind=q) :: Akk      !! |c_k|^2
-    real(kind=q) :: dE, kbT
-
-    kbT = inp%TEMP * BOLKEV
-
-    Akk = REAL(CONJG(ks%psi_a(cstat, indion+1)) * ks%psi_a(cstat, indion+1), kind=q)
-    ! Bkm = REAL(CONJG(Akm) * Ckm)
-    !ks%Bkm = 2. * REAL(CONJG(ks%psi_a(cstat, tion)) * ks%psi_a(:, tion) * &
-    !                ks%NAcoup(cstat, :, tion))
-    !Changed the matrix structure for NAC. 
-    !Now NAC(i,j) is stored as  ks%NAcoup(j,i,time)
-    ks%Bkm = 2.0_q * REAL(CONJG(ks%psi_a(cstat, indion+1)) * ks%psi_a(:, indion+1) * &
-                    ks%NAcoup(:, cstat, tion), kind=q)
-
-
-    ks%sh_prop(:, indion+1) = ks%Bkm / Akk * inp%POTIM
-
-
-   ! if (inp%LHOLE) then
-   !   do i = 1, cstat
-   !     dE = ks%eigKs(cstat, tion) - ks%eigKs(i,tion)
-   !     ks%sh_prop(i,tion) = ks%sh_prop(i,tion) * exp(-dE / kbT)
-   !   end do
-   ! else
-   !   do i=cstat, ks%ndim
-   !     dE = ks%eigKs(i,tion) - ks%eigKs(cstat, tion)
-   !     ks%sh_prop(i,tion) = ks%sh_prop(i,tion) * exp(-dE / kbT)
-   !   end do
-   ! end if
-       
-    do i = 1, ks%ndim
-      dE = ((ks%eigKs(i,tion) + ks%eigKs(i,tion+1)) - &
-            (ks%eigKs(cstat,tion)+ ks%eigKs(cstat,tion+1)))    &
-           / 2.0_q
-      if (inp%LHOLE) then
-        dE = -dE
-      end if
-      if (dE>0) then
-        ks%sh_prop(i,indion+1) = ks%sh_prop(i,indion+1) * exp(-dE / kbT)
-      end if
-    end do
-
-    forall (i=1:ks%ndim, ks%sh_prop(i,indion+1) < 0) ks%sh_prop(i,indion+1) = 0.0_q
-    ! write(*,*) (ks%Bkm(i), i=1, ks%ndim) 
-    ! write(*,*) (ks%sh_prop(i, tion), i=1, ks%ndim) 
 
   end subroutine
 
@@ -116,28 +62,14 @@ module fssh
       !Changed the matrix structure for NAC. 
       !Now NAC(i,j) is stored as  ks%NAcoup(j,i,time)
       Bkm_c = REAL(CONJG(ks%psi_c(i)) * ks%psi_c(:) * &
-                   calcDij(tion, tele, i, ks), kind=q)
+                   calcDij(ks%NAcoup(:,i,tion-1),ks%NAcoup(:,i,tion),ks%NAcoup(:,i,tion+1),tele), kind=q)
       Bkm_p = REAL(CONJG(ks%psi_p(i)) * ks%psi_p(:) * &
-                   calcDij(tion, tele-1, i, ks), kind=q)
+                   calcDij(ks%NAcoup(:,i,tion-1),ks%NAcoup(:,i,tion),ks%NAcoup(:,i,tion+1),tele-1), kind=q)
 
       ks%sh_prob(:, i, indion) = ks%sh_prob(:, i, indion) + &
                                  (Bkm_p / Akk_p + Bkm_c / Akk_c) * edt
     end do
-  contains
-    function calcDij(tion_, tele_, i_, ks_)
-      implicit none
-      integer, intent(in) :: tion_, tele_, i_
-      type(TDKS), intent(in) :: ks_
-      real(kind=q), dimension(ks_%ndim) :: calcDij
 
-      if (tele_ <= (inp%NELM / 2)) then
-        calcDij(:) = interpolate((tele_ + inp%NELM/2.0_q) / inp%NELM, &
-                                            ks_%NAcoup(:,i_,tion_-1), ks_%NAcoup(:,i_,tion_))
-      else 
-        calcDij(:) = interpolate((tele_ - inp%NELM/2.0_q) / inp%NELM, &
-                                            ks_%NAcoup(:,i_,tion_), ks_%NAcoup(:,i_,tion_+1))
-      end if
-    end function
   end subroutine
     
   subroutine calcProbwithDBC(tion, indion, ks)
@@ -178,15 +110,13 @@ module fssh
     integer :: i, j
     integer :: istat, iend, cstat
     real(kind=q) :: norm, edt
+    logical :: init
 
     ! init
     istat = inp%INIBAND
-    ! ks%psi_a = con%cero
-    ! ks%psi_a(istat, 1) = con%uno
-    ! ks%pop_a = 0.0_q 
-    ! ks%pop_a(istat, 1) = 1.0_q
     cstat = istat
     edt = inp%POTIM / inp%NELM
+    init = .TRUE.
 
     ! Enter the Loop
     do indion=1, inp%NAMDTIME - 1
@@ -195,9 +125,23 @@ module fssh
 
       do tele = 1, inp%NELM
         ks%psi_p = ks%psi_c
-
-        call make_hamil_rtime(tion, tele, ks)
+        call make_hamil(tion, tele, ks)
         call Trotter(ks, edt)
+
+        ! ks%psi_p = ks%psi_c
+        ! call make_hamil(tion, tele, ks)
+        ! call Euler(ks, edt)
+        
+        ! if (init) then
+        !   ks%psi_p = ks%psi_c
+        !   call make_hamil(tion, tele, ks)
+        !   call Euler(ks, edt)
+        !   init = .FALSE.
+        ! else
+        !   call make_hamil2(tion, tele, ks)
+        !   call EulerMod(ks, edt)
+        ! end if
+
         if (inp%LSHP) call calcProb(tion, indion, tele, ks)
       end do
       norm = REAL(SUM(CONJG(ks%psi_c) * ks%psi_c), kind=q) 
@@ -222,8 +166,6 @@ module fssh
     integer :: istat, cstat, which
 
     istat = inp%INIBAND
-    ! ks%sh_pops = 0.0_q
-    ! ks%sh_prop = 0.0_q
 
     ! initialize the random seed for ramdom number production
     call init_random_seed()
@@ -233,8 +175,6 @@ module fssh
       cstat = istat
       do indion=1, inp%NAMDTIME - 1
         tion = indion + inp%NAMDTINI - 1
-
-        ! call calcprop(tion, indion, cstat, ks)
 
         call whichToHop(indion, ks, cstat, which)
 
@@ -248,9 +188,6 @@ module fssh
     ks%sh_pops = ks%sh_pops / inp%NTRAJ
     ks%sh_pops(istat, 1) = 1.0_q
 
-    ! do tion=1, inp%NAMDTIME
-    !   write(*,*) (ks%sh_pops(i,tion), i=1, ks%ndim)
-    ! end do
   end subroutine
 
   subroutine printSE(ks)
@@ -285,7 +222,6 @@ module fssh
     close(26)
 
   end subroutine
-
 
   subroutine printSH(ks)
     implicit none

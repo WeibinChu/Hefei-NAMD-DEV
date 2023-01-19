@@ -14,7 +14,7 @@ module constants
     complex(q) :: miI = (0.0_q, -1.0_q)
     complex(q) :: cero = (0.0_q, 0.0_q)
     complex(q) :: uno = (1.0_q, 0.0_q)
-    complex(q) :: hbar = 0.6582119281559802_q ! reduced Planck constant eV / fs
+    real(q)    :: hbar = 0.6582119281559802_q ! reduced Planck constant eV / fs
   end type
   
   type(constant), protected :: con

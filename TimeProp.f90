@@ -72,11 +72,44 @@ contains
         ckk = ks%psi_c(kk)
         ks%psi_c(jj) =  cos_phi * cjj + sin_phi * ckk
         ks%psi_c(kk) = -sin_phi * cjj + cos_phi * ckk
-
       end do
     end do
   end subroutine
   
+  subroutine Euler(ks, edt)  
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    real(kind=q), intent(in) :: edt
+
+    ks%psi_c = ks%psi_c &
+               & - con%I * edt / con%hbar * matmul(transpose(ks%ham_c), ks%psi_c)
+
+  end subroutine
+
+  !! The first step should use Euler method.
+  subroutine EulerMod(ks, edt)
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    real(kind=q), intent(in) :: edt
+
+    !! check, should be deleted.
+    if ((.NOT. allocated(ks%psi_p)) .OR. (.NOT. allocated(ks%psi_n))) then
+      write(*,*) '[E] Did not allocate memory for psi_p and psi_n'
+      stop
+    end if
+
+    ! if (.NOT. init) then
+      ks%psi_n = ks%psi_p &
+                 & - 2 * con%I * edt / con%hbar * matmul(transpose(ks%ham_c), ks%psi_c)
+    ! else
+    !   ks%psi_n = ks%psi_c &
+    !              & - con%I * edt / con%hbar * matmul(transpose(ks%ham_c), ks%psi_c)
+    ! end if
+    ks%psi_p = ks%psi_c
+    ks%psi_c = ks%psi_n
+
+  end subroutine
+
   subroutine PropagationEle(ks, tion)
     implicit none
     type(TDKS), intent(inout)  :: ks
@@ -89,7 +122,7 @@ contains
     
     do tele = 1, inp%NELM
       ! construct hamiltonian matrix
-      call make_hamil_rtime(tion, tele, ks)
+      call make_hamil(tion, tele, ks)
 
       call Trotter(ks, edt)
     end do

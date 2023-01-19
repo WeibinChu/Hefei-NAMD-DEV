@@ -152,6 +152,7 @@ contains
 
   end subroutine
 
+  
   subroutine runDISH(ks)
     implicit none
 
@@ -189,7 +190,7 @@ contains
     integer, intent(in)       :: iend
     integer, intent(inout)    :: istat
 
-    integer :: fgend = 0 !! recomb indicator
+    integer :: fgend !! recomb indicator
     integer :: i, j, k, tion, indion
     integer :: which, cstat
     real(kind=q), dimension(inp%NBASIS) :: decmoment !! t_i(t)
@@ -201,10 +202,12 @@ contains
     ks%psi_c(istat) = con%uno
     cstat = istat
     decmoment = 0.0_q
+    fgend = 0
 
-    do j=1,inp%NBASIS
-      shuffle(j)=j
-    end do
+    shuffle = [(j, j=1,inp%NBASIS)]
+    ! do j=1,inp%NBASIS
+    !   shuffle(j)=j
+    ! end do
 
     indion = 1
     do indion=1, inp%NAMDTIME - 1
