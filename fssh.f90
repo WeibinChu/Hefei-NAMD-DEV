@@ -1,7 +1,9 @@
 module fssh
   use prec
+  use constants
   use fileio
   use utils
+  use couplings
   use hamil
   use TimeProp
   implicit none
@@ -47,7 +49,7 @@ module fssh
     type(TDKS), intent(inout) :: ks
     integer, intent(in) :: tion, indion, tele
 
-    integer :: i, j
+    integer :: i
     real(kind=q) :: Akk_p, Akk_c      !! |c_k|^2
     real(kind=q), dimension(ks%ndim) :: Bkm_p, Bkm_c
     real(kind=q) :: edt
@@ -107,8 +109,7 @@ module fssh
     implicit none
     type(TDKS), intent(inout) :: ks
     integer :: tion, indion, tele
-    integer :: i, j
-    integer :: istat, iend, cstat
+    integer :: istat, cstat
     real(kind=q) :: norm, edt
     logical :: init
 
@@ -124,24 +125,30 @@ module fssh
       tion = indion + inp%NAMDTINI - 1
 
       do tele = 1, inp%NELM
-        ks%psi_p = ks%psi_c
-        call make_hamil(tion, tele, ks)
-        call Trotter(ks, edt)
-
-        ! ks%psi_p = ks%psi_c
-        ! call make_hamil(tion, tele, ks)
-        ! call Euler(ks, edt)
-        
-        ! if (init) then
-        !   ks%psi_p = ks%psi_c
-        !   call make_hamil(tion, tele, ks)
-        !   call Euler(ks, edt)
-        !   init = .FALSE.
-        ! else
-        !   call make_hamil2(tion, tele, ks)
-        !   call EulerMod(ks, edt)
-        ! end if
-
+        select case (inp%ALGO_INT)
+        case (0)
+          ks%psi_p = ks%psi_c
+          call make_hamil(tion, tele, ks)
+          call Trotter(ks, edt)
+        case (11)
+          ks%psi_p = ks%psi_c
+          call make_hamil(tion, tele, ks)
+          call Euler(ks, edt)
+        case (10)
+          if (init) then
+            ks%psi_p = ks%psi_c
+            call make_hamil(tion, tele, ks)
+            call Euler(ks, edt)
+            init = .FALSE.
+          else
+            call make_hamil2(tion, tele, ks)
+            call EulerMod(ks, edt)
+          end if
+        case (2)
+          ks%psi_p = ks%psi_c
+          call make_hamil(tion, tele, ks)
+          call Diagonize(ks, edt, tele, indion)
+        end select
         if (inp%LSHP) call calcProb(tion, indion, tele, ks)
       end do
       norm = REAL(SUM(CONJG(ks%psi_c) * ks%psi_c), kind=q) 
@@ -162,7 +169,7 @@ module fssh
     implicit none
 
     type(TDKS), intent(inout) :: ks
-    integer :: i, j, tion, indion
+    integer :: i, tion, indion
     integer :: istat, cstat, which
 
     istat = inp%INIBAND
@@ -194,7 +201,7 @@ module fssh
     implicit none
     type(TDKS), intent(in) :: ks
 
-    integer :: i, j, ierr
+    integer :: i, ierr
     integer :: tion, indion
     character(len=48) :: buf
     character(len=48) :: out_fmt, out_fmt_cmplx
@@ -212,9 +219,11 @@ module fssh
 
     do indion=1, inp%NAMDTIME
       tion = indion + inp%NAMDTINI - 1
-      write(unit=25, fmt=out_fmt_cmplx) indion * inp%POTIM, SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)), &
+      write(unit=25, fmt=out_fmt_cmplx) indion * inp%POTIM, &
+                                  SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)), &
                                   (ks%psi_a(i,indion), i=1, ks%ndim)
-      write(unit=26, fmt=out_fmt) indion * inp%POTIM, SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)), &
+      write(unit=26, fmt=out_fmt) indion * inp%POTIM, &
+                                  SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)), &
                                   (ks%pop_a(i,indion), i=1, ks%ndim)
     end do
 
@@ -227,7 +236,7 @@ module fssh
     implicit none
     type(TDKS), intent(in) :: ks
 
-    integer :: i, j, ierr
+    integer :: i, ierr
     integer :: tion, indion
     character(len=48) :: buf
     character(len=48) :: out_fmt
@@ -249,6 +258,74 @@ module fssh
     end do
 
     close(24)
+
+  end subroutine
+
+  subroutine printMPFSSH(ks, olap_sp)
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    type(overlap), intent(in) :: olap_sp
+
+    integer :: i, ierr
+    integer :: bi, tion, indion
+    integer, dimension(inp%NACELE) :: bands
+
+    character(len=48) :: buf
+    character(len=48) :: out_fmt
+
+    write(buf, *) inp%NAMDTINI
+    write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  inp%NBADNS
+    
+    open(unit=51, file='MPPOPRT.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
+    if (ierr /= 0) then
+      write(*,*) "[E] IOError: MPPOPRT file I/O error!"
+      stop
+    end if
+
+    ks%mppop_a = 0.0_q
+    do i=1, ks%ndim
+      bands = inp%BASIS(:,i)
+      do bi=1, inp%NACELE
+        ks%mppop_a(bands(bi),:) = ks%mppop_a(bands(bi),:) + &
+                                  ks%pop_a(i,:)
+      end do
+    end do
+
+    do indion=1, inp%NAMDTIME
+      tion = indion + inp%NAMDTINI - 1
+      write(unit=51, fmt=out_fmt) indion * inp%POTIM, & 
+                                  SUM(olap_sp%Eig(:,tion) * ks%mppop_a(:,indion)) / inp%NACELE, &
+                                  (ks%mppop_a(i,indion), i=1, inp%NBADNS)
+    end do
+
+    close(51)
+
+    !! Surfacr Hopping
+    if (inp%LSHP) then
+      open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
+      if (ierr /= 0) then
+        write(*,*) "[E] IOError: MPSHPROP file I/O error!"
+        stop
+      end if
+  
+      ks%sh_mppops = 0.0_q
+      do i=1, ks%ndim
+        bands = inp%BASIS(:,i)
+        do bi=1, inp%NACELE
+          ks%sh_mppops(bands(bi),:) = ks%sh_mppops(bands(bi),:) + &
+                                      ks%sh_pops(i,:)
+        end do
+      end do
+  
+      do indion=1, inp%NAMDTIME
+        tion = indion + inp%NAMDTINI - 1
+        write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
+                                    SUM(olap_sp%Eig(:,tion) * ks%sh_mppops(:,indion)) / inp%NACELE, &
+                                    (ks%sh_mppops(i,indion), i=1, inp%NBADNS)
+      end do
+  
+      close(52)
+    end if
 
   end subroutine
 

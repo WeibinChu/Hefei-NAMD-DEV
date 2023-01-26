@@ -59,4 +59,18 @@ contains
     cmplx_norm = REAL(CONJG(x) * x, kind=q)
   end function
 
+  pure function zDIAG(N, V)
+    implicit none
+    integer, intent(in)   :: N
+    complex(q), intent(in), dimension(N) :: V
+    complex(q), dimension(N,N) :: zDIAG
+
+    logical, dimension(N,N) :: MASK
+    integer :: i
+
+    zDIAG = 0.0_q
+    MASK = reshape([(MOD(i,N) == i/N, i=0,N*N-1)], shape=[N,N])
+    zDIAG = unpack(V, MASK, zDIAG)
+  end function
+
 end module utils

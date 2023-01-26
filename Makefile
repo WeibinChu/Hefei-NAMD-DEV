@@ -3,10 +3,12 @@
 #-------------------------------------------------------------------------------
 # FC= ifort -assume byterecl 
 FC= gfortran
+FC= x86_64-w64-mingw32-gfortran
 # FFLAGS= -g -O3
 FFLAGS= -g -O3 -fbacktrace -fbounds-check # -Wall -Wextra -Wconversion
 # FFLAGS= -g -O3 -heap-arrays -check bounds -g -traceback
 MAKE = make
+LAPACK = libblas.dll.a liblapack.dll.a
 
 #-------------------------------------------------------------------------------
 # Src
@@ -30,10 +32,10 @@ EXE = hfnamd
 # Targets
 #-------------------------------------------------------------------------------
 tdm:	$(OBJ)
-	$(FC) $(FFLAGS) -o $(EXE) $(OBJ) $(SPGLIB)  
+	$(FC) $(FFLAGS) -o $(EXE) $(OBJ) $(SPGLIB) $(LAPACK) 
 
 clean:
-	rm -f *.mod *.a
+	rm -f *.mod
 	rm -f $(OBJ)
 tar:
 	tar -czvf hfnamd.tgz *.f90 Makefile

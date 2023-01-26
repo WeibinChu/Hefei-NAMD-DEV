@@ -18,14 +18,12 @@ module couplings
 
 contains
 
-  subroutine TDCoupIJ(olap)
+  subroutine TDCoupIJ(olap, olap_sp)
     implicit none
     type(overlap), intent(out) :: olap
-    type(overlap) :: olap_sp !! single particle overlap
+    type(overlap), intent(out) :: olap_sp !! single particle overlap
 
     logical :: lcoup
-    ! integer :: i, j, nsw, ndigit
-    ! character(len=256) :: fileA, fileB, buf, tmp
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Initialization
@@ -42,11 +40,6 @@ contains
     allocate(olap_sp%Dij(olap_sp%NBANDS, olap_sp%NBANDS, olap_sp%TSTEPS))
     allocate(olap_sp%Eig(olap_sp%NBANDS, olap_sp%TSTEPS))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    ! nsw = olap%TSTEPS
-    ! write(buf,*) nsw
-    ! ndigit = len_trim(adjustl(buf))
-    ! write(buf,*) '(I0.', ndigit, ')'
 
     inquire(file='COUPCAR', exist=lcoup)
     if (lcoup) then
@@ -67,7 +60,7 @@ contains
       stop
     end if
 
-    deallocate(olap_sp%Dij, olap_sp%Eig)
+    ! deallocate(olap_sp%Dij, olap_sp%Eig)
   end subroutine
 
   subroutine readNaEig(olap)
@@ -125,21 +118,19 @@ contains
     olap%Dij = 0.0_q
 
     ! Gound State Energy
-    do N=1,inp%NSW
-      do j=1,inp%NACELE
-        band = inp%BASIS(1,j)
-        eig_gs(N) = eig_gs(N) + olap_sp%Eig(band,N)
-      end do
+    do j=1,inp%NACELE
+      band = inp%BASIS(j,1)
+      eig_gs(:) = eig_gs(:) + olap_sp%Eig(band,:)
     end do
 
     ! Excite State Energy
-    do N=1,inp%NSW
-      do i=1,inp%NBASIS
-        do j=1,inp%NACELE
-          band = inp%BASIS(i,j)
-          olap%Eig(i,N) = olap%Eig(i,N) + olap_sp%Eig(band,N)
-        end do
+    do i=1,inp%NBASIS
+      do j=1,inp%NACELE
+        band = inp%BASIS(j,i)
+        olap%Eig(i,:) = olap%Eig(i,:) + olap_sp%Eig(band,:)
       end do
+    end do
+    do N=1,inp%NSW
       olap%Eig(:,N) = olap%Eig(:,N) - eig_gs(N)
     end do
 
@@ -150,24 +141,22 @@ contains
     !                           k''!=k'
     ! N = NACELE, i,j: states, k',k'': electrons
     ! Dij is stored as Dij(j,i,N)
-    do N=1,inp%NSW
-      do i=1,inp%NBASIS
-        do j=i+1,inp%NBASIS
-          bi = inp%BASIS(i,:)
-          bj = inp%BASIS(j,:)
-          do k=1,inp%NACELE   !! k'
-            beq = .true.
-            do l=1,inp%NACELE !! k'' != k'
-              if (l /= k .and. bi(l) /= bj(l)) beq = .false.
-              if (beq) then
-                ! olap%Dij(i,j,N) = olap%Dij(i,j,N) + olap_sp%Dij(bi(k),bj(k),N)
-                olap%Dij(j,i,N) = olap%Dij(j,i,N) + olap_sp%Dij(bj(k),bi(k),N)
-              end if
-            end do
-          end do 
-          ! olap%Dij(j,i,N) = -olap%Dij(i,j,N)
-          olap%Dij(i,j,N) = -olap%Dij(j,i,N)
-        end do
+    do i=1,inp%NBASIS
+      do j=i+1,inp%NBASIS
+        bi = inp%BASIS(:,i)
+        bj = inp%BASIS(:,j)
+        do k=1,inp%NACELE   !! k'
+          beq = .true.
+          do l=1,inp%NACELE !! k'' != k'
+            if (l /= k .and. bi(l) /= bj(l)) beq = .false.
+            if (beq) then
+              ! olap%Dij(i,j,N) = olap%Dij(i,j,N) + olap_sp%Dij(bi(k),bj(k),N)
+              olap%Dij(j,i,:) = olap%Dij(j,i,:) + olap_sp%Dij(bj(k),bi(k),:)
+            end if
+          end do
+        end do 
+        ! olap%Dij(j,i,N) = -olap%Dij(i,j,N)
+        olap%Dij(i,j,N) = -olap%Dij(j,i,N)
       end do
     end do
 

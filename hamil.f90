@@ -20,18 +20,20 @@ module hamil
     ! the result of hamiltonian acting on a vector
     ! complex(kind=q), allocatable, dimension(:) :: hpsi
     !! population
-    real(kind=q), allocatable, dimension(:,:) :: pop_a
+    real(kind=q), allocatable, dimension(:,:) :: pop_a, mppop_a
     !!!!real(kind=q), allocatable, dimension(:) :: pop_c, pop_n
     ! real(kind=q) :: norm_c !! unused
 
     complex(kind=q), allocatable, dimension(:,:) :: ham_c
+    complex(kind=q), allocatable, dimension(:,:,:,:) :: lg_expH !! (i,j,NELM,NSW)
+    logical, allocatable, dimension(:,:) :: lg_expH_on !! (NELM,NSW)
 
     ! KS eigenvalues & Non-adiabatic couplings
     real(kind=q), allocatable, dimension(:,:) :: eigKs
     real(kind=q), allocatable, dimension(:,:,:) :: NAcoup
 
     !! surface hopping related
-    real(kind=q), allocatable, dimension(:,:) :: sh_pops
+    real(kind=q), allocatable, dimension(:,:) :: sh_pops, sh_mppops
     real(kind=q), allocatable, dimension(:,:,:) :: sh_prob !! P_ij (j,i,N-1)
 
     !! decoherence induced surface hopping
@@ -73,6 +75,10 @@ contains
         allocate(ks%pop_a(N, inp%NAMDTIME))
         allocate(ks%sh_pops(N, inp%NAMDTIME))
         allocate(ks%sh_prob(N, N, inp%NAMDTIME-1))
+        if (inp%LSPACE) then
+          allocate(ks%mppop_a(inp%NBADNS, inp%NAMDTIME))
+          allocate(ks%sh_mppops(inp%NBADNS, inp%NAMDTIME))
+        end if
       case ('DISH')
         allocate(ks%dish_pops(N, inp%NAMDTIME))
         allocate(ks%recom_pops(N,inp%NAMDTIME))
@@ -82,6 +88,13 @@ contains
       ! Now copy olap%eig&Dij => ks%eig%Dij
       ks%eigKs = olap%Eig
       ks%NAcoup = olap%Dij / (2*inp%POTIM)
+
+      ! Diagonize
+      if (inp%ALGO_INT == 2) then
+        allocate(ks%lg_expH(N, N, inp%NELM, inp%NSW))
+        allocate(ks%lg_expH_on(inp%NELM, inp%NSW))
+        ks%lg_expH_on = .FALSE.
+      end if
 
       ks%LALLO = .TRUE.
     end if

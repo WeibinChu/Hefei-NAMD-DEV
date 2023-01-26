@@ -1,5 +1,7 @@
 module TimeProp
   use prec
+  use constants
+  use utils
   use fileio
   use hamil
 
@@ -37,8 +39,8 @@ contains
     !Now Ham_c(i,j) is stored as  ks%ham_c(j,i)
     !Weibin
 
-    do jj = 1, inp%NBASIS
-      do kk = jj+1, inp%NBASIS
+    do jj = 1, ks%ndim
+      do kk = jj+1, ks%ndim
         phi = 0.5_q * edt * con%miI * ks%ham_c(kk, jj) / con%hbar
         cos_phi = cos(phi)
         sin_phi = sin(phi)
@@ -56,15 +58,15 @@ contains
     !Weibin
 
 
-    do jj = 1, inp%NBASIS
+    do jj = 1, ks%ndim
       phi = edt * con%miI * ks%ham_c(jj, jj) / con%hbar
       ks%psi_c(jj) = ks%psi_c(jj) * exp(phi)
     end do
 
     ! Second L_{ij} part
     ! this should be simplified by the symmetry of Dij, I will change it later.
-    do jj = inp%NBASIS, 1, -1
-      do kk = inp%NBASIS, jj+1, -1
+    do jj = ks%ndim, 1, -1
+      do kk = ks%ndim, jj+1, -1
         phi = 0.5_q * edt * con%miI * ks%ham_c(kk, jj) / con%hbar
         cos_phi = cos(phi)
         sin_phi = sin(phi)
@@ -108,6 +110,70 @@ contains
     ks%psi_p = ks%psi_c
     ks%psi_c = ks%psi_n
 
+  end subroutine
+
+  subroutine Diagonize(ks, edt, tele, indion)
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    real(kind=q), intent(in) :: edt
+    integer, intent(in) :: tele, indion
+
+    integer :: INFO, LWORK
+    real(kind=q),    dimension(ks%ndim)         :: eig
+    complex(kind=q), dimension(ks%ndim,ks%ndim) :: exp_eig
+    complex(kind=q), dimension(2*ks%ndim-1)     :: WORK
+    real(kind=q),    dimension(3*ks%ndim-2)     :: RWORK
+
+    complex(kind=q), dimension(ks%ndim,ks%ndim) :: C1, C2
+    complex(kind=q), dimension(ks%ndim)         :: Y
+
+    ! if (.NOT. ks%lg_expH_on(tele, indion)) then
+      !! https://netlib.org/lapack/explore-html
+      !! zHEEV(JOBZ,UPLO,N,A,LDA,W,WORK,LWORK,RWORK,INFO)
+      LWORK = 2*ks%ndim - 1
+      call zHEEV('V', 'U',                  &
+                ks%ndim, ks%ham_c, ks%ndim, &
+                eig,                        &
+                WORK, LWORK, RWORK,         &
+                INFO)
+      if (INFO == 0) then
+        exp_eig = zDIAG(ks%ndim, exp(con%miI*edt/con%hbar*eig))
+      else
+        write(*,*) '[E] Hamiltonian Diagonization Error. Code: ', INFO
+        stop
+      end if
+
+      !! zGEMM(TRANSA,TRANSB,M,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
+      !! C2 = matmul(matmul(conjg(ks%ham_c), exp_eig), transpose(ks%ham_c)) !! H_ij
+      C1 = con%cero
+      C2 = con%cero
+      call zGEMM('C', 'N',                                             &
+                ks%ndim, ks%ndim, ks%ndim, con%uno, ks%ham_c, ks%ndim, &
+                exp_eig, ks%ndim,                                      &
+                con%cero, C1, ks%ndim)
+      call zGEMM('N', 'T',                                             &
+                ks%ndim, ks%ndim, ks%ndim, con%uno, C1, ks%ndim,       &
+                ks%ham_c, ks%ndim,                                     &
+                con%cero, C2, ks%ndim)
+
+      !! zGEMV(TRANS,M,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
+      Y = con%cero
+      call zGEMV('N',                                   &
+                ks%ndim, ks%ndim, con%uno, C2, ks%ndim, &
+                ks%psi_c, 1,                            &
+                con%cero, Y, 1)
+      ks%psi_c = Y
+
+    !   ks%lg_expH_on(tele,indion) = .TRUE.
+    !   ks%lg_expH(:,:,tele,indion) = C2
+    ! else
+    !   Y = con%cero
+    !   call zGEMV('N',                                                            &
+    !             ks%ndim, ks%ndim, con%uno, ks%lg_expH(:,:,tele,indion), ks%ndim, &
+    !             ks%psi_c, 1,                                                     &
+    !             con%cero, Y, 1)
+    !   ks%psi_c = Y
+    ! end if
   end subroutine
 
   subroutine PropagationEle(ks, tion)

@@ -1,7 +1,9 @@
 module dish
   use prec
+  use constants
   use fileio
   use utils
+  use couplings
   use hamil
   use TimeProp
   implicit none

@@ -7,7 +7,8 @@ module fileio
     logical, private :: isCreated = .false.
     integer :: BMIN
     integer :: BMAX
-    integer, allocatable, dimension(:,:) :: BASIS !! Active Space Basis Macrostate (nacbasis, nacele)
+    integer :: NBADNS
+    integer, allocatable, dimension(:,:) :: BASIS !! Active Space Basis Macrostate (nacele, nacbasis)
     integer :: NBASIS      ! No. of adiabatic states as basis
     integer :: INIBAND     ! inititial adiabatic state of excited electron/hole
     integer :: NAMDTINI    ! Initial time step of NAMD
@@ -31,6 +32,7 @@ module fileio
     logical :: LSHP
     ! whether to perform DISH, right now the value is .TRUE.
     character(len=256) :: ALGO !! SH Algorrithm
+    integer :: ALGO_INT
     logical :: LCPTXT
     logical :: LSPACE
     ! running directories
@@ -92,6 +94,7 @@ contains
       ! surface hopping?
       logical :: lshp   = .TRUE.
       character(len=256) :: algo = 'DISH'
+      integer :: algo_int = 0
       logical :: lcpext = .TRUE.
       logical :: lspace = .FALSE.
       ! running directories
@@ -102,12 +105,12 @@ contains
 
       character(len=256) :: debuglevel = 'I'
 
-      namelist /NAMDPARA/ bmin, bmax,                &
-                          nsample, ntraj, nsw, nelm, &
-                          temp, namdtime, potim,     &
-                          lhole, algo, lcpext, lshp, &
-                          lspace, nacbasis, nacele,  &    !!
-                          rundir, tbinit, diinit, spinit, &
+      namelist /NAMDPARA/ bmin, bmax,                          &
+                          nsample, ntraj, nsw, nelm,           &
+                          temp, namdtime, potim,               &
+                          lhole, lshp, algo, algo_int, lcpext, &
+                          lspace, nacbasis, nacele,            &
+                          rundir, tbinit, diinit, spinit,      &
                           debuglevel
 
       integer :: ierr, i, j
@@ -188,29 +191,20 @@ contains
           stop
         else
           open(unit=11, file=spinit, action='read')
-          read(unit=11, fmt=*) ((this%BASIS(i,j),j=1,nacele),i=1,nacbasis)
+          read(unit=11, fmt=*) ((this%BASIS(j,i), j=1,nacele), i=1,nacbasis)
           close(11)
           this%NBASIS = nacbasis
         end if
       else
         allocate(this%BASIS(bmax - bmin + 1, 1))
-        this%BASIS = reshape([(i, i=bmin, bmax)], shape=[bmax-bmin+1, 1])
+        this%BASIS = reshape([(i, i=bmin, bmax)], shape=[1,bmax-bmin+1])
         this%NBASIS = bmax - bmin + 1
       end if
-
-      ! if (realtime<=namdtime) then
-      !   realtime=namdtime
-      ! else
-      !   if (algo /= 'DISH') then 
-      !     write(*,*) "We do not recommend replicating NAC in FSSH"
-      !     write(*,*) "Used NAMDTIME instead of REALTIME"
-      !     realtime=namdtime
-      !   end if
-      ! end if
 
       ! assign the parameters
       this%BMIN     = bmin
       this%BMAX     = bmax
+      this%NBADNS   = bmax - bmin + 1
 
       this%NSW      = nsw
       this%NTRAJ    = ntraj
@@ -225,6 +219,7 @@ contains
       this%LSHP     = lshp
       this%LCPTXT   = lcpext
       this%ALGO     = algo
+      this%ALGO_INT = algo_int
 
       this%RUNDIR   = trim(rundir)
       this%TBINIT   = trim(tbinit)
@@ -285,6 +280,7 @@ contains
       write(*,'(A30,A3,L8)') 'LHOLE',    ' = ', this%LHOLE
       write(*,'(A30,A3,L8)') 'LSHP',     ' = ', this%LSHP
       write(*,'(A30,A3,A8)') 'ALGO',     ' = ', TRIM(ADJUSTL(this%ALGO))
+      write(*,'(A30,A3,I8)') 'ALGO_INT', ' = ', this%ALGO_INT
       write(*,'(A30,A3,L8)') 'LCPTXT',   ' = ', this%LCPTXT
       write(*,'(A)') ""
       write(*,'(A30,A3,L8)') 'LSPACE',   ' = ', this%LSPACE
