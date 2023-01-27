@@ -75,7 +75,7 @@ Program main
       end if
       if (inp%LSPACE) then
         start=fin
-        call printMPFSSH(ks, olap_sp)
+        call printMPFSSH(ks)
         write(*,'(A, F8.2)') "CPU Time in printMPFSSH [s]:", fin - start
       end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -120,12 +120,12 @@ contains
     write(*,'(A)') "|     bmin, bmax,                                                                                           |"
     write(*,'(A)') "|     nsample, ntraj, nsw, nelm,                                                                            |"
     write(*,'(A)') "|     temp, namdtime, potim,                                                                                |"
-    write(*,'(A)') "|     lhole, lshp, algo, algo_int, lcpext,                                                                  |"
+    write(*,'(A)') "|     lhole, lshp, algo, algo_int, lcptxt,                                                                  |"
     write(*,'(A)') "|     lspace, nacbasis, nacele,                                                                             |"
     write(*,'(A)') "|     rundir, tbinit, diinit, spinit,                                                                       |"
     write(*,'(A)') "|     debuglevel                                                                                            |"
     write(*,'(A)') "| Supported input files:                                                                                    |"
-    write(*,'(A)') "|     inp, INICON, DEPHTIME, ACSPACE                                                                        |"
+    write(*,'(A)') "|     inp, COUPCAR, EIGTXT, NATXT, INICON, DEPHTIME, ACSPACE                                                |"
     write(*,'(A)') "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
     write(*,'(A)') "                                                                                                             "
   end subroutine

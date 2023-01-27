@@ -82,11 +82,11 @@ contains
 
     N = inp%NSW 
     do j=1, N 
-      read(unit=22, fmt=*) (olap%Eig(i,j), i=1, inp%NBASIS)
+      read(unit=22, fmt=*) (olap%Eig(i,j), i=1, olap%NBANDS)
     end do
     do k=1, N
-      read(unit=23, fmt=*) ((olap%Dij(j, i, k), j=1, inp%NBASIS), &
-                                                   i=1, inp%NBASIS)
+      read(unit=23, fmt=*) ((olap%Dij(j, i, k), j=1, olap%NBANDS), &
+                                                   i=1, olap%NBANDS)
     end do
 
     close(unit=22)
@@ -119,14 +119,14 @@ contains
 
     ! Gound State Energy
     do j=1,inp%NACELE
-      band = inp%BASIS(j,1)
+      band = inp%BASIS(j,1) - inp%BMIN + 1
       eig_gs(:) = eig_gs(:) + olap_sp%Eig(band,:)
     end do
 
     ! Excite State Energy
     do i=1,inp%NBASIS
       do j=1,inp%NACELE
-        band = inp%BASIS(j,i)
+        band = inp%BASIS(j,i) - inp%BMIN + 1
         olap%Eig(i,:) = olap%Eig(i,:) + olap_sp%Eig(band,:)
       end do
     end do
@@ -143,20 +143,22 @@ contains
     ! Dij is stored as Dij(j,i,N)
     do i=1,inp%NBASIS
       do j=i+1,inp%NBASIS
-        bi = inp%BASIS(:,i)
-        bj = inp%BASIS(:,j)
+        bi = inp%BASIS(:,i) - inp%BMIN + 1
+        bj = inp%BASIS(:,j) - inp%BMIN + 1
         do k=1,inp%NACELE   !! k'
           beq = .true.
           do l=1,inp%NACELE !! k'' != k'
-            if (l /= k .and. bi(l) /= bj(l)) beq = .false.
-            if (beq) then
-              ! olap%Dij(i,j,N) = olap%Dij(i,j,N) + olap_sp%Dij(bi(k),bj(k),N)
-              olap%Dij(j,i,:) = olap%Dij(j,i,:) + olap_sp%Dij(bj(k),bi(k),:)
+            if (l == k) cycle
+            if (bi(l) /= bj(l)) then
+              beq = .false.
+              exit
             end if
           end do
+          if (beq) then
+            olap%Dij(j,i,:) = olap%Dij(j,i,:) + olap_sp%Dij(bj(k),bi(k),:)
+          end if
         end do 
-        ! olap%Dij(j,i,N) = -olap%Dij(i,j,N)
-        olap%Dij(i,j,N) = -olap%Dij(j,i,N)
+        olap%Dij(i,j,:) = -olap%Dij(j,i,:)
       end do
     end do
 

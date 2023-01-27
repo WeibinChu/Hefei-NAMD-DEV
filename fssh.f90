@@ -261,10 +261,9 @@ module fssh
 
   end subroutine
 
-  subroutine printMPFSSH(ks, olap_sp)
+  subroutine printMPFSSH(ks)
     implicit none
     type(TDKS), intent(inout) :: ks
-    type(overlap), intent(in) :: olap_sp
 
     integer :: i, ierr
     integer :: bi, tion, indion
@@ -284,7 +283,7 @@ module fssh
 
     ks%mppop_a = 0.0_q
     do i=1, ks%ndim
-      bands = inp%BASIS(:,i)
+      bands = inp%BASIS(:,i) - inp%BMIN + 1
       do bi=1, inp%NACELE
         ks%mppop_a(bands(bi),:) = ks%mppop_a(bands(bi),:) + &
                                   ks%pop_a(i,:)
@@ -294,7 +293,7 @@ module fssh
     do indion=1, inp%NAMDTIME
       tion = indion + inp%NAMDTINI - 1
       write(unit=51, fmt=out_fmt) indion * inp%POTIM, & 
-                                  SUM(olap_sp%Eig(:,tion) * ks%mppop_a(:,indion)) / inp%NACELE, &
+                                  SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)) / inp%NACELE, &
                                   (ks%mppop_a(i,indion), i=1, inp%NBADNS)
     end do
 
@@ -310,7 +309,7 @@ module fssh
   
       ks%sh_mppops = 0.0_q
       do i=1, ks%ndim
-        bands = inp%BASIS(:,i)
+        bands = inp%BASIS(:,i) - inp%BMIN + 1
         do bi=1, inp%NACELE
           ks%sh_mppops(bands(bi),:) = ks%sh_mppops(bands(bi),:) + &
                                       ks%sh_pops(i,:)
@@ -320,7 +319,7 @@ module fssh
       do indion=1, inp%NAMDTIME
         tion = indion + inp%NAMDTINI - 1
         write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
-                                    SUM(olap_sp%Eig(:,tion) * ks%sh_mppops(:,indion)) / inp%NACELE, &
+                                    SUM(ks%eigKs(:,tion) * ks%sh_pops(:,indion)) / inp%NACELE, &
                                     (ks%sh_mppops(i,indion), i=1, inp%NBADNS)
       end do
   

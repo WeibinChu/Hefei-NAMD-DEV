@@ -8,6 +8,8 @@ module fileio
     integer :: BMIN
     integer :: BMAX
     integer :: NBADNS
+    integer :: HORB
+    integer :: LORB
     integer, allocatable, dimension(:,:) :: BASIS !! Active Space Basis Macrostate (nacele, nacbasis)
     integer :: NBASIS      ! No. of adiabatic states as basis
     integer :: INIBAND     ! inititial adiabatic state of excited electron/hole
@@ -95,7 +97,7 @@ contains
       logical :: lshp   = .TRUE.
       character(len=256) :: algo = 'DISH'
       integer :: algo_int = 0
-      logical :: lcpext = .TRUE.
+      logical :: lcptxt = .TRUE.
       logical :: lspace = .FALSE.
       ! running directories
       character(len=256) :: rundir = 'run'
@@ -108,7 +110,7 @@ contains
       namelist /NAMDPARA/ bmin, bmax,                          &
                           nsample, ntraj, nsw, nelm,           &
                           temp, namdtime, potim,               &
-                          lhole, lshp, algo, algo_int, lcpext, &
+                          lhole, lshp, algo, algo_int, lcptxt, &
                           lspace, nacbasis, nacele,            &
                           rundir, tbinit, diinit, spinit,      &
                           debuglevel
@@ -184,14 +186,16 @@ contains
 
       ! ACSPACE
       if (lspace) then
-        allocate(this%BASIS(nacbasis, nacele))
+        allocate(this%BASIS(nacele, nacbasis))
         inquire(file=spinit, exist=lext)
         if (.NOT. lext) then
           write(*,*) "[E] IOError: File containing Active Space does NOT exist!"
           stop
         else
           open(unit=11, file=spinit, action='read')
-          read(unit=11, fmt=*) ((this%BASIS(j,i), j=1,nacele), i=1,nacbasis)
+          do i = 1, nacbasis
+            read(unit=11, fmt=*) (this%BASIS(j,i), j=1,nacele)
+          end do
           close(11)
           this%NBASIS = nacbasis
         end if
@@ -217,7 +221,7 @@ contains
 
       this%LHOLE    = lhole
       this%LSHP     = lshp
-      this%LCPTXT   = lcpext
+      this%LCPTXT   = lcptxt
       this%ALGO     = algo
       this%ALGO_INT = algo_int
 

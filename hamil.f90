@@ -25,8 +25,8 @@ module hamil
     ! real(kind=q) :: norm_c !! unused
 
     complex(kind=q), allocatable, dimension(:,:) :: ham_c
-    complex(kind=q), allocatable, dimension(:,:,:,:) :: lg_expH !! (i,j,NELM,NSW)
-    logical, allocatable, dimension(:,:) :: lg_expH_on !! (NELM,NSW)
+    ! complex(kind=q), allocatable, dimension(:,:,:,:) :: lg_expH !! (i,j,NELM,NSW)
+    ! logical, allocatable, dimension(:,:) :: lg_expH_on !! (NELM,NSW)
 
     ! KS eigenvalues & Non-adiabatic couplings
     real(kind=q), allocatable, dimension(:,:) :: eigKs
@@ -90,11 +90,11 @@ contains
       ks%NAcoup = olap%Dij / (2*inp%POTIM)
 
       ! Diagonize
-      if (inp%ALGO_INT == 2) then
-        allocate(ks%lg_expH(N, N, inp%NELM, inp%NSW))
-        allocate(ks%lg_expH_on(inp%NELM, inp%NSW))
-        ks%lg_expH_on = .FALSE.
-      end if
+      ! if (inp%ALGO_INT == 2) then
+      !   allocate(ks%lg_expH(N, N, inp%NELM, inp%NSW))
+      !   allocate(ks%lg_expH_on(inp%NELM, inp%NSW))
+      !   ks%lg_expH_on = .FALSE.
+      ! end if
 
       ks%LALLO = .TRUE.
     end if
