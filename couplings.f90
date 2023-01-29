@@ -89,6 +89,12 @@ contains
                                                    i=1, olap%NBANDS)
     end do
 
+    if (inp%LHOLE) then
+      call inp%setHLORB(1, olap%NBANDS)
+    else
+      call inp%setHLORB(olap%NBANDS, 1)
+    end if
+
     close(unit=22)
     close(unit=23)
   end subroutine
@@ -106,6 +112,8 @@ contains
     type(overlap), intent(in)    :: olap_sp
 
     integer :: i, j, k, l, N, band, ierr
+    integer :: horb, lorb
+    real(q) :: heig, leig
     integer, dimension(inp%NACELE) :: bi, bj
     logical :: beq = .false.
     real(q), dimension(olap%TSTEPS) :: eig_gs !! ground state eigenvalue
@@ -118,10 +126,10 @@ contains
     olap%Dij = 0.0_q
 
     ! Gound State Energy
-    do j=1,inp%NACELE
-      band = inp%BASIS(j,1) - inp%BMIN + 1
-      eig_gs(:) = eig_gs(:) + olap_sp%Eig(band,:)
-    end do
+    ! do j=1,inp%NACELE
+    !   band = inp%BASIS(j,1) - inp%BMIN + 1
+    !   eig_gs(:) = eig_gs(:) + olap_sp%Eig(band,:)
+    ! end do
 
     ! Excite State Energy
     do i=1,inp%NBASIS
@@ -130,9 +138,33 @@ contains
         olap%Eig(i,:) = olap%Eig(i,:) + olap_sp%Eig(band,:)
       end do
     end do
-    do N=1,inp%NSW
-      olap%Eig(:,N) = olap%Eig(:,N) - eig_gs(N)
+
+    heig = -huge(0.0_q)
+    leig = huge(0.0_q)
+    do i=1,inp%NBASIS
+      if (olap%Eig(i,1) > heig) then
+        horb = i
+        heig = olap%Eig(i,1)
+      end if
+      if (olap%Eig(i,1) < leig) then
+        lorb = i
+        leig = olap%Eig(i,1)
+      end if
     end do
+    if (inp%LHOLE) then
+      call inp%setHLORB(lorb, horb)
+    else
+      call inp%setHLORB(horb, lorb)
+    end if
+
+    ! Minus Gound State Energy
+    do N=1,inp%NSW
+      olap%Eig(:,N) = olap%Eig(:,N) - olap%Eig(inp%LORB,N)
+    end do
+
+    ! do N=1,inp%NSW
+    !   olap%Eig(:,N) = olap%Eig(:,N) - eig_gs(N)
+    ! end do
 
     ! NAC Matrix Elements, anti-hermite, assuming real Dij = -Dji
     !         N                  N
@@ -161,6 +193,8 @@ contains
         olap%Dij(i,j,:) = -olap%Dij(j,i,:)
       end do
     end do
+
+    if (inp%DEBUGLEVEL > 0) return
 
     do N=1,inp%NSW
       write(unit=35,fmt=*) (olap%Eig(i,N), i=1, olap%NBANDS)

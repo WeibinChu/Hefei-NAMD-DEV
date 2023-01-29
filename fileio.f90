@@ -8,8 +8,8 @@ module fileio
     integer :: BMIN
     integer :: BMAX
     integer :: NBADNS
-    integer :: HORB
-    integer :: LORB
+    integer :: HORB        ! Highest energy orbit, usually N(e) or 1(h)
+    integer :: LORB        ! Lowest  energy orbit, usually 1(e) or N(h)
     integer, allocatable, dimension(:,:) :: BASIS !! Active Space Basis Macrostate (nacele, nacbasis)
     integer :: NBASIS      ! No. of adiabatic states as basis
     integer :: INIBAND     ! inititial adiabatic state of excited electron/hole
@@ -46,7 +46,7 @@ module fileio
   contains
     procedure :: getInstance
     procedure :: getUserInp, printUserInp
-    procedure :: setIni
+    procedure :: setIni, setHLORB
     procedure, private :: checkUserInp
   end type
 
@@ -68,6 +68,13 @@ contains
       integer, intent(in) :: value
       this%INIBAND = this%INIBAND_A(value)
       this%NAMDTINI = this%NAMDTINI_A(value)
+    end subroutine
+
+    subroutine setHLORB(this, horb, lorb)
+      class(namdInfo), intent(inout) :: this
+      integer, intent(in) :: horb, lorb
+      this%HORB = horb
+      this%LORB = lorb
     end subroutine
 
     subroutine getUserInp(this)

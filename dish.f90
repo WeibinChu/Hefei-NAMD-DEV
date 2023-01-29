@@ -161,39 +161,33 @@ contains
     type(TDKS), intent(inout) :: ks
 
     integer :: i
-    integer :: istat, iend
 
     ! ks%dish_pops = 0.0_q
     ! ks%recom_pops = 0.0_q
-    istat = inp%INIBAND
-    if (inp%LHOLE) then
-      iend=inp%NBASIS
-    else
-      iend=1
-    end if
+    
 
     ! initialize the random seed for ramdom number production
     call init_random_seed()
-    !$OMP PARALLEL DO SHARED(ks,inp,istat), PRIVATE(i),REDUCTION(+:ks%dish_pops)
+    ! have to move ks%Eig/NAcoup to an anothor type
+    !$OMP PARALLEL DO DEFAULT(PRIVATE), SHARED(inp), PRIVATE(i), FIRSTPRIVATE(ks), REDUCTION(+:ks%dish_pops,ks%recom_pops)
     !MPI is under development
     do i=1, inp%NTRAJ
-      call mpirundish(ks, istat, iend)
+      call mpirundish(ks)
     end do
     !$OMP END PARALLEL DO
     ks%dish_pops = ks%dish_pops / inp%NTRAJ
-    ks%dish_pops(istat, 1) = 1.0_q
+    ks%dish_pops(inp%INIBAND, 1) = 1.0_q
 
   end subroutine
 
-  subroutine mpirundish(ks, istat, iend)
+  subroutine mpirundish(ks)
     implicit none
 
     type(TDKS), intent(inout) :: ks
-    integer, intent(in)       :: iend
-    integer, intent(inout)    :: istat
 
     integer :: fgend !! recomb indicator
     integer :: i, j, k, tion, indion
+    integer :: istat, iend
     integer :: which, cstat
     real(kind=q), dimension(inp%NBASIS) :: decmoment !! t_i(t)
     integer, dimension(inp%NBASIS)      :: shuffle
@@ -202,6 +196,8 @@ contains
     ! At the first step, current state always equal initial state
     ks%psi_c = con%cero
     ks%psi_c(istat) = con%uno
+    istat = inp%INIBAND
+    iend  = inp%LORB
     cstat = istat
     decmoment = 0.0_q
     fgend = 0

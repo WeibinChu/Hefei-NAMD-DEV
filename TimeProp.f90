@@ -54,7 +54,7 @@ contains
     ! Li part
 
     !Changed the matrix structure for NAC.
-    !Now Ham_c(i,j) is stored as  ks%ham_c(j,i) ?
+    !Now Ham_c(i,j) is stored as  ks%ham_c(j,i) 
     !Weibin
 
 
@@ -64,7 +64,6 @@ contains
     end do
 
     ! Second L_{ij} part
-    ! this should be simplified by the symmetry of Dij, I will change it later.
     do jj = ks%ndim, 1, -1
       do kk = ks%ndim, jj+1, -1
         phi = 0.5_q * edt * con%miI * ks%ham_c(kk, jj) / con%hbar
@@ -78,6 +77,67 @@ contains
     end do
   end subroutine
   
+  subroutine TrotterMat(ks, edt)
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    real(kind=q), intent(in)  :: edt
+
+    integer :: jj, kk
+    complex(kind=q) :: cos_phi, sin_phi
+    complex(kind=q), dimension(ks%ndim,ks%ndim) :: identity, ham_l, ham_r
+    complex(kind=q), dimension(ks%ndim) :: cjj, ckk
+
+    ! Here input Ham_c(j,i), output Ham_c(i,j)
+    identity = zDIAG(ks%ndim, [(con%uno, jj=1,ks%ndim)])
+    ! phi
+    ks%ham_c(:,:) = 0.5_q * edt * con%miI * ks%ham_c(:,:) / con%hbar
+
+    ham_l = identity
+    do jj = 1, ks%ndim
+      do kk = jj+1, ks%ndim
+        cos_phi = cos(ks%ham_c(kk, jj))
+        sin_phi = sin(ks%ham_c(kk, jj))
+        cjj(:) = cos_phi * ham_l(:,jj) - sin_phi * ham_l(:,kk)
+        ckk(:) = sin_phi * ham_l(:,jj) + cos_phi * ham_l(:,kk)
+        ham_l(:,jj) = cjj(:)
+        ham_l(:,kk) = ckk(:)
+        ! ham_r = identity
+        ! ham_r(jj,jj) =  cos_phi
+        ! ham_r(kk,kk) =  cos_phi
+        ! ham_r(jj,kk) =  sin_phi
+        ! ham_r(kk,jj) = -sin_phi
+        ! ham_l = matmul(ham_l, ham_r)
+      end do
+    end do
+
+    ! ham_r = identity
+    do jj = 1, ks%ndim
+      ham_l(:,jj) = ham_l(:,jj) * exp(2 * ks%ham_c(jj,jj))
+      ! ham_r(jj,jj) = exp(2 * ks%ham_c(jj,jj))
+    end do
+    ! ham_l = matmul(ham_l, ham_r)
+
+    do jj = ks%ndim, 1, -1
+      do kk = ks%ndim, jj+1, -1
+        cos_phi = cos(ks%ham_c(kk, jj))
+        sin_phi = sin(ks%ham_c(kk, jj))
+        cjj(:) = cos_phi * ham_l(:,jj) - sin_phi * ham_l(:,kk)
+        ckk(:) = sin_phi * ham_l(:,jj) + cos_phi * ham_l(:,kk)
+        ham_l(:,jj) = cjj(:)
+        ham_l(:,kk) = ckk(:)
+        ! ham_r = identity
+        ! ham_r(jj,jj) =  cos_phi
+        ! ham_r(kk,kk) =  cos_phi
+        ! ham_r(jj,kk) =  sin_phi
+        ! ham_r(kk,jj) = -sin_phi
+        ! ham_l = matmul(ham_l, ham_r)
+      end do
+    end do
+
+    ks%ham_c = ham_l
+
+  end subroutine
+
   subroutine Euler(ks, edt)  
     implicit none
     type(TDKS), intent(inout) :: ks
@@ -95,7 +155,7 @@ contains
     real(kind=q), intent(in) :: edt
 
     !! check, should be deleted.
-    if ((.NOT. allocated(ks%psi_p)) .OR. (.NOT. allocated(ks%psi_n))) then
+    if ((inp%DEBUGLEVEL <= 0 .AND. (.NOT. allocated(ks%psi_p)) .OR. (.NOT. allocated(ks%psi_n)))) then
       write(*,*) '[E] Did not allocate memory for psi_p and psi_n'
       stop
     end if
@@ -112,11 +172,10 @@ contains
 
   end subroutine
 
-  subroutine Diagonize(ks, edt, tele, indion)
+  subroutine DiagonizeMat(ks, edt)
     implicit none
     type(TDKS), intent(inout) :: ks
     real(kind=q), intent(in) :: edt
-    integer, intent(in) :: tele, indion
 
     integer :: INFO, LWORK
     real(kind=q),    dimension(ks%ndim)         :: eig
@@ -125,56 +184,81 @@ contains
     real(kind=q),    dimension(3*ks%ndim-2)     :: RWORK
 
     complex(kind=q), dimension(ks%ndim,ks%ndim) :: C1, C2
-    complex(kind=q), dimension(ks%ndim)         :: Y
+    ! complex(kind=q), dimension(ks%ndim)         :: Y
 
-    ! if (.NOT. ks%lg_expH_on(tele, indion)) then
-      !! https://netlib.org/lapack/explore-html
-      !! zHEEV(JOBZ,UPLO,N,A,LDA,W,WORK,LWORK,RWORK,INFO)
-      LWORK = 2*ks%ndim - 1
-      call zHEEV('V', 'U',                  &
-                ks%ndim, ks%ham_c, ks%ndim, &
-                eig,                        &
-                WORK, LWORK, RWORK,         &
-                INFO)
-      if (INFO == 0) then
-        exp_eig = zDIAG(ks%ndim, exp(con%miI*edt/con%hbar*eig))
-      else
-        write(*,*) '[E] Hamiltonian Diagonization Error. Code: ', INFO
-        stop
-      end if
+    !! https://netlib.org/lapack/explore-html
+    !! zHEEV(JOBZ,UPLO,N,A,LDA,W,WORK,LWORK,RWORK,INFO)
+    LWORK = 2*ks%ndim - 1
+    call zHEEV('V', 'U',                  &
+              ks%ndim, ks%ham_c, ks%ndim, &
+              eig,                        &
+              WORK, LWORK, RWORK,         &
+              INFO)
+    if (INFO == 0) then
+      exp_eig = zDIAG(ks%ndim, exp(con%miI*edt/con%hbar*eig))
+    else
+      write(*,*) '[E] Hamiltonian Diagonization Error. Code: ', INFO
+      stop
+    end if
 
-      !! zGEMM(TRANSA,TRANSB,M,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
-      !! C2 = matmul(matmul(conjg(ks%ham_c), exp_eig), transpose(ks%ham_c)) !! H_ij
-      C1 = con%cero
-      C2 = con%cero
-      call zGEMM('C', 'N',                                             &
-                ks%ndim, ks%ndim, ks%ndim, con%uno, ks%ham_c, ks%ndim, &
-                exp_eig, ks%ndim,                                      &
-                con%cero, C1, ks%ndim)
-      call zGEMM('N', 'T',                                             &
-                ks%ndim, ks%ndim, ks%ndim, con%uno, C1, ks%ndim,       &
-                ks%ham_c, ks%ndim,                                     &
-                con%cero, C2, ks%ndim)
+    !! zGEMM(TRANSA,TRANSB,M,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
+    !! C2 = matmul(matmul(conjg(ks%ham_c), exp_eig), transpose(ks%ham_c)) !! H_ij
+    C1 = con%cero
+    C2 = con%cero
+    call zGEMM('C', 'N',                                             &
+              ks%ndim, ks%ndim, ks%ndim, con%uno, ks%ham_c, ks%ndim, &
+              exp_eig, ks%ndim,                                      &
+              con%cero, C1, ks%ndim)
+    call zGEMM('N', 'T',                                             &
+              ks%ndim, ks%ndim, ks%ndim, con%uno, C1, ks%ndim,       &
+              ks%ham_c, ks%ndim,                                     &
+              con%cero, C2, ks%ndim)
 
-      !! zGEMV(TRANS,M,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
-      Y = con%cero
-      call zGEMV('N',                                   &
-                ks%ndim, ks%ndim, con%uno, C2, ks%ndim, &
-                ks%psi_c, 1,                            &
-                con%cero, Y, 1)
-      ks%psi_c = Y
+    ks%ham_c = C2
+    !! zGEMV(TRANS,M,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
+    ! Y = con%cero
+    ! call zGEMV('N',                                   &
+    !           ks%ndim, ks%ndim, con%uno, C2, ks%ndim, &
+    !           ks%psi_c, 1,                            &
+    !           con%cero, Y, 1)
+    ! ks%psi_c = Y
 
-    !   ks%lg_expH_on(tele,indion) = .TRUE.
-    !   ks%lg_expH(:,:,tele,indion) = C2
-    ! else
-    !   Y = con%cero
-    !   call zGEMV('N',                                                            &
-    !             ks%ndim, ks%ndim, con%uno, ks%lg_expH(:,:,tele,indion), ks%ndim, &
-    !             ks%psi_c, 1,                                                     &
-    !             con%cero, Y, 1)
-    !   ks%psi_c = Y
-    ! end if
   end subroutine
+
+  function HamPsi(ham, psi, jobz)
+    implicit none
+    complex(kind=q), intent(in), dimension(:,:) :: ham
+    complex(kind=q), intent(in), dimension(:)   :: psi
+    character(len=1), intent(in) :: jobz
+    
+    complex(kind=q), dimension(size(psi)) :: HamPsi
+
+    select case (jobz)
+    case ('N')
+      HamPsi = matmul(ham, psi)
+    case ('C')
+      HamPsi = matmul(transpose(ham), psi)
+    end select
+  end function
+
+  function HamPsiBlas(ham, psi, jobz)
+    implicit none
+    complex(kind=q), intent(in), dimension(:,:) :: ham
+    complex(kind=q), intent(in), dimension(:)   :: psi
+    character(len=1), intent(in) :: jobz
+    
+    complex(kind=q), dimension(size(psi)) :: HamPsiBlas, Y
+    integer :: N
+
+    !! zGEMV(TRANS,M,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
+    N = size(psi)
+    Y = con%cero
+    call zGEMV(jobz,                 &
+              N, N, con%uno, ham, N, &
+              psi, 1,                &
+              con%cero, Y, 1)
+    HamPsiBlas = Y
+  end function
 
   subroutine PropagationEle(ks, tion)
     implicit none

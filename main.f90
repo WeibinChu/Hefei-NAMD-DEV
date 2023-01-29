@@ -16,7 +16,7 @@ Program main
 
   call system_clock(count_rate=cr)
   call system_clock(count_max=cm)
-  call cpu_time(startall)
+  
   call printWelcome()
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! First, get user inputs
@@ -36,6 +36,7 @@ Program main
   ! is done in the subroutine 'initTDKS'.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   call TDCoupIJ(olap, olap_sp)
+  call cpu_time(startall)
   ! write(*,*) "T_coup: ", fin - start
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   do ns=1, inp%NSAMPLE
@@ -93,7 +94,7 @@ Program main
   end do
   call cpu_time(finall)
   write(*,'(A)') "------------------------------------------------------------"
-  write(*,'(A, F8.2)') "All Time Elapsed [s]:", finall - startall
+  write(*,'(A, F10.2)') "All Time Elapsed [s]:", finall - startall
 
 contains
 

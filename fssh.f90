@@ -130,7 +130,7 @@ module fssh
           ks%psi_p = ks%psi_c
           call make_hamil(tion, tele, ks)
           call Trotter(ks, edt)
-        case (11)
+        case (11) ! this method will accumulate error! May renormalize wfc.
           ks%psi_p = ks%psi_c
           call make_hamil(tion, tele, ks)
           call Euler(ks, edt)
@@ -141,13 +141,14 @@ module fssh
             call Euler(ks, edt)
             init = .FALSE.
           else
-            call make_hamil2(tion, tele, ks)
+            call make_hamil2(tion, tele-1, ks)
             call EulerMod(ks, edt)
           end if
         case (2)
           ks%psi_p = ks%psi_c
           call make_hamil(tion, tele, ks)
-          call Diagonize(ks, edt, tele, indion)
+          call DiagonizeMat(ks, edt)
+          ks%psi_c = HamPsiBlas(ks%ham_c, ks%psi_c, 'N')
         end select
         if (inp%LSHP) call calcProb(tion, indion, tele, ks)
       end do
