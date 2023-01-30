@@ -144,15 +144,5 @@ contains
                                                                         time(1:2), time(3:4), time(5:10), &
                                                                         zone
   end subroutine
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
+
 end Program

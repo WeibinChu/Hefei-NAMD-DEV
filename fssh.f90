@@ -81,7 +81,7 @@ module fssh
     integer, intent(in) :: tion, indion
 
     integer :: i, j
-    real(kind=q) :: dE, kbT
+    real(kind=q) :: dE(ks%ndim), kbT
 
     kbT = inp%TEMP * BOLKEV
 
@@ -89,16 +89,14 @@ module fssh
     ! Beware there is a tricky part: 
     ! P_ij * EXP(-dE/kT) != SUM(P_ij/N * EXP(-dE/N/kT)) = P_ij * EXP(-dE/NkT)
     do i = 1, ks%ndim        
-      do j = 1, ks%ndim
-        dE = ((ks%eigKs(j,tion) + ks%eigKs(j,tion+1)) - &
-              (ks%eigKs(i,tion) + ks%eigKs(i,tion+1))) / 2.0_q
-        if (inp%LHOLE) then
-          dE = -dE
-        end if
-        if (dE>0) then
-          ks%sh_prob(j,i,indion) = ks%sh_prob(j,i,indion) * exp(-dE / kbT)
-        end if
-      end do
+      dE = ((ks%eigKs(:,tion) + ks%eigKs(:,tion+1)) - &
+            (ks%eigKs(i,tion) + ks%eigKs(i,tion+1))) / 2.0_q
+      if (inp%LHOLE) then
+        dE = -dE
+      end if
+      where ( dE > 0.0_q )
+        ks%sh_prob(:,i,indion) = ks%sh_prob(:,i,indion) * exp(-dE / kbT)
+      end where
 
       forall (j=1:ks%ndim, ks%sh_prob(j,i,indion) < 0) ks%sh_prob(j,i,indion) = 0.0_q
     end do
