@@ -1,4 +1,5 @@
 module fileio
+  use omp_lib
   use prec
 
   implicit none
@@ -32,7 +33,6 @@ module fileio
     logical :: LHOLE
     ! whether to perform surface hopping, right now the value is .TRUE.
     logical :: LSHP
-    ! whether to perform DISH, right now the value is .TRUE.
     character(len=256) :: ALGO !! SH Algorrithm
     integer :: ALGO_INT
     logical :: LCPTXT
@@ -41,7 +41,9 @@ module fileio
     character(len=256) :: RUNDIR
     character(len=256) :: TBINIT
     character(len=256) :: DIINIT   !! input of pure dephasing time matrix
+    ! DISH parameters
     real(kind=q), allocatable, dimension(:,:) :: DEPHMATR     !! Pure dephasing rate between any two adiabatic states from the file DEPHTIME, 1/fs unit, symmetric
+    integer :: NPARDISH
     integer :: DEBUGLEVEL
   contains
     procedure :: getInstance
@@ -99,13 +101,13 @@ contains
       real(kind=q) :: temp = 300_q
 
       ! hole or electron surface hopping
-      logical :: lhole  = .FALSE.
-      ! surface hopping?
-      logical :: lshp   = .TRUE.
-      character(len=256) :: algo = 'DISH'
-      integer :: algo_int = 0
-      logical :: lcptxt = .TRUE.
-      logical :: lspace = .FALSE.
+      logical :: lhole          = .FALSE.
+      logical :: lshp           = .TRUE.  !! surface hopping?
+      character(len=16) :: algo = 'DISH'
+      integer :: algo_int       = 0
+      logical :: lcptxt         = .TRUE.
+      logical :: lspace         = .FALSE.
+      integer :: npardish       = 1
       ! running directories
       character(len=256) :: rundir = 'run'
       character(len=256) :: tbinit = 'INICON'
@@ -119,10 +121,11 @@ contains
                           temp, namdtime, potim,               &
                           lhole, lshp, algo, algo_int, lcptxt, &
                           lspace, nacbasis, nacele,            &
+                          npardish,                            &
                           rundir, tbinit, diinit, spinit,      &
                           debuglevel
 
-      integer :: ierr, i, j
+      integer :: ierr, i, j, nthread = 1
       logical :: lext
 
       ! inp
@@ -132,8 +135,13 @@ contains
         stop
       end if
 
+      ! read inp
       read(unit=8, nml=NAMDPARA)
       close(unit=8)
+
+      ! omp
+      nthread = MIN(npardish, omp_get_max_threads())
+      call omp_set_num_threads(nthread)
 
       ! DEBUGLEVEL
       select case (debuglevel)
@@ -231,6 +239,7 @@ contains
       this%LCPTXT   = lcptxt
       this%ALGO     = algo
       this%ALGO_INT = algo_int
+      this%NPARDISH = nthread
 
       this%RUNDIR   = trim(rundir)
       this%TBINIT   = trim(tbinit)
@@ -292,6 +301,7 @@ contains
       write(*,'(A30,A3,L8)') 'LSHP',     ' = ', this%LSHP
       write(*,'(A30,A3,A8)') 'ALGO',     ' = ', TRIM(ADJUSTL(this%ALGO))
       write(*,'(A30,A3,I8)') 'ALGO_INT', ' = ', this%ALGO_INT
+      if (this%ALGO == 'DISH') write(*,'(A30,A3,I8)') 'NPARDISH', ' = ', this%NPARDISH
       write(*,'(A30,A3,L8)') 'LCPTXT',   ' = ', this%LCPTXT
       write(*,'(A)') ""
       write(*,'(A30,A3,L8)') 'LSPACE',   ' = ', this%LSPACE

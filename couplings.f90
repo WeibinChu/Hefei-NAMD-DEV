@@ -60,6 +60,8 @@ contains
       stop
     end if
 
+    olap%Dij = olap%Dij / (2*inp%POTIM)
+    olap_sp%Dij = olap_sp%Dij / (2*inp%POTIM)
     ! deallocate(olap_sp%Dij, olap_sp%Eig)
   end subroutine
 

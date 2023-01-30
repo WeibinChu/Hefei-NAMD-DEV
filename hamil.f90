@@ -35,8 +35,9 @@ module hamil
     real(kind=q), allocatable, dimension(:,:,:) :: sh_prob !! P_ij (j,i,N-1)
 
     !! decoherence induced surface hopping
-    real(kind=q), allocatable, dimension(:,:) :: dish_pops
+    real(kind=q), allocatable, dimension(:,:) :: dish_pops, dish_mppops
     real(kind=q), allocatable, dimension(:,:) :: recom_pops
+    real(kind=q), allocatable, dimension(:)   :: dish_decmoment !! t_i(t)
     ! whether the memory has been allocated
     logical :: LALLO = .FALSE.
 
@@ -78,14 +79,16 @@ contains
           allocate(ks%sh_mppops(inp%NBADNS, inp%NAMDTIME))
         end if
       case ('DISH')
-        allocate(ks%dish_pops(N, inp%NAMDTIME))
-        allocate(ks%recom_pops(N,inp%NAMDTIME))
+        allocate(ks%dish_decmoment(N))
+        if (inp%LSPACE) then
+          allocate(ks%dish_mppops(inp%NBADNS, inp%NAMDTIME))
+        end if
       case default
       end select
 
       ! Now copy olap%eig&Dij => ks%eig%Dij
       ks%eigKs = olap%Eig
-      ks%NAcoup = olap%Dij / (2*inp%POTIM)
+      ks%NAcoup = olap%Dij
 
       ks%LALLO = .TRUE.
     end if
@@ -103,8 +106,7 @@ contains
       ks%sh_pops = 0.0_q
       ks%sh_prob = 0.0_q
     case ('DISH')
-      ks%dish_pops = 0.0_q
-      ks%recom_pops = 0.0_q
+      ks%dish_decmoment = 0.0_q
     end select
 
   end subroutine

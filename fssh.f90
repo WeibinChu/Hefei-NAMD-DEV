@@ -27,7 +27,7 @@ module fssh
 
     do i=1, ks%ndim
       if (i == 1) then
-        lower = 0
+        lower = 0.0_q
         ! upper = ks%sh_prop(i, indion+1)
         upper = ks%sh_prob(i, cstat, indion)
       else
@@ -209,7 +209,7 @@ module fssh
 
     write(buf, *) inp%NAMDTINI
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  ks%ndim
-    write (out_fmt_cmplx, '( "(f13.2,f11.6, ", I5, "(f11.6,SP,f9.6", A3, "))" )' )  ks%ndim, '"i"'
+    write (out_fmt_cmplx, '( "(f13.2,f11.6, ", I5, "(SS,f11.6,SP,f9.6", A3, "))" )' )  ks%ndim, '"i"'
     
     open(unit=25, file='PSICT.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
     open(unit=26, file='POPRT.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)

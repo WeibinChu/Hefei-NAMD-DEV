@@ -5,7 +5,7 @@
 FC= gfortran
 FC= x86_64-w64-mingw32-gfortran
 # FFLAGS= -g -O3
-FFLAGS= -g -O3 -fbacktrace -fbounds-check # -Wall -Wextra -Wconversion -fopenmp/qopenmp
+FFLAGS= -g -O3 -fbacktrace -fbounds-check -fopenmp # -Wall -Wextra -Wconversion -fopenmp/qopenmp
 # FFLAGS= -g -O3 -heap-arrays -check bounds -g -traceback
 MAKE = make
 LAPACK = libblas.dll.a liblapack.dll.a

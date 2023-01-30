@@ -172,6 +172,22 @@ contains
 
   end subroutine
 
+  subroutine EulerMat(ks, edt)
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    real(kind=q), intent(in) :: edt
+  
+    ks%ham_c = con%miI * edt / con%hbar * ks%ham_c
+  end subroutine
+
+  subroutine EulerModMat(ks, edt)
+    implicit none
+    type(TDKS), intent(inout) :: ks
+    real(kind=q), intent(in) :: edt
+  
+    ks%ham_c = 2 * con%miI * edt / con%hbar * ks%ham_c
+  end subroutine
+
   subroutine DiagonizeMat(ks, edt)
     implicit none
     type(TDKS), intent(inout) :: ks

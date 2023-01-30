@@ -1,12 +1,37 @@
 program test_sgesv
+    use omp_lib
     implicit none
-    real :: a(3,3),b(3)
-    integer :: v(3),iflag
-    external sgesv
-    a=reshape([2.0,0.0,0.0,0.0,3.0,0.0,0.0,0.0,4.0],[3,3])
-    b=[998.0,999.0,1000.0]
-    print *,'a=',a
-    print *,'b=',b
-    call sgesv(3,1,a,3,v,b,3,iflag)
-    print *,'solve=',b
+    integer :: i, j, x
+    integer :: ct, cr, cm, t1, t2
+    real :: t3, t4
+
+    ! x = 999
+    ! call omp_set_num_threads(8)
+    ! x = omp_get_max_threads()
+    ! write(*,*) x
+
+    ! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+    ! do i = 1, 20
+    !     x = x+i
+    !     write(*,*) i, x, omp_get_thread_num()
+    ! end do
+    ! !$OMP END PARALLEL DO
+
+    call system_clock(t1, cr, cm)
+    call cpu_time(t3)
+
+    do i=1, 1000
+        do j=1, 1000
+            write(100,*) ''
+        end do
+    end do
+
+    call cpu_time(t4)
+    call system_clock(t2, cr, cm)
+
+    write(*,*) t1, t2, t3, t4, cr,cm
+    write(*,*) 'CPU', t4-t3
+    write(*,*) 'SYS', MOD(t2-t1, cm) / REAL(cr)
+
+
 end program test_sgesv

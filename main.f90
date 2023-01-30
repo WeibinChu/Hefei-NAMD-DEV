@@ -11,8 +11,7 @@ Program main
   type(TDKS) :: ks
   type(overlap) :: olap, olap_sp
 
-  real(kind=q) :: start, fin, startall, finall
-  integer :: ns,cr,cm
+  integer :: ns, cr, cm, t1, t2, ttot1, ttot2
 
   call system_clock(count_rate=cr)
   call system_clock(count_max=cm)
@@ -36,99 +35,124 @@ Program main
   ! is done in the subroutine 'initTDKS'.
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   call TDCoupIJ(olap, olap_sp)
-  call cpu_time(startall)
-  ! write(*,*) "T_coup: ", fin - start
+  call system_clock(ttot1)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   do ns=1, inp%NSAMPLE
     call inp%setIni(ns)
     call inp%printUserInp()
 
     ! initiate KS matrix
-    call cpu_time(start)
+    call system_clock(t1)
     call initTDKS(ks, olap)
-    call cpu_time(fin)
-    write(*,'(A, F8.2)') "CPU Time in initTDKS [s]:", fin - start
+    call system_clock(t2)
+    write(*,'(A, T31, F11.3)') "CPU Time in initTDKS [s]:", MOD(t2-t1, cm) / REAL(cr)
 
     select case(inp%ALGO)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     case ('FSSH')
       ! Time propagation
-      start=fin
+      t1 = t2
       call runSE(ks)
-      call cpu_time(fin)
-      write(*,'(A, F8.2)') "CPU Time in runSE [s]:", fin - start
+      call system_clock(t2)
+      write(*,'(A, T31, F11.3)') "CPU Time in runSE [s]:", MOD(t2-t1, cm) / REAL(cr)
 
-      start=fin
+      t1 = t2
       call printSE(ks)
-      call cpu_time(fin)
-      write(*,'(A, F8.2)') "CPU Time in printSE [s]:", fin - start
+      call system_clock(t2)
+      write(*,'(A, T31, F11.3)') "CPU Time in printSE [s]:", MOD(t2-t1, cm) / REAL(cr)
       ! Run surface hopping
       if (inp%LSHP) then
-        start=fin
+        t1 = t2
         call runSH(ks)
-        call cpu_time(fin)
-        write(*,'(A, F8.2)') "CPU Time in runSH [s]:", fin - start
+        call system_clock(t2)
+        write(*,'(A, T31, F11.3)') "CPU Time in runSH [s]:", MOD(t2-t1, cm) / REAL(cr)
 
-        start=fin
+        t1 = t2
         call printSH(ks)
-        call cpu_time(fin)
-        write(*,'(A, F8.2)') "CPU Time in printSH [s]:", fin - start
+        call system_clock(t2)
+        write(*,'(A, T31, F11.3)') "CPU Time in printSH [s]:", MOD(t2-t1, cm) / REAL(cr)
       end if
       if (inp%LSPACE) then
-        start=fin
+        t1 = t2
         call printMPFSSH(ks)
-        write(*,'(A, F8.2)') "CPU Time in printMPFSSH [s]:", fin - start
+        write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
       end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     case ('DISH')
-      start=fin
-      call runDISH(ks)
-      call cpu_time(fin)
-      write(*,'(A, F8.2)') "CPU Time in runDISH [s]:", fin - start
+      t1 = t2
+      call runDISH(ks, olap)
+      call system_clock(t2)
+      write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
 
-      start=fin
+      t1 = t2
       call printDISH(ks)
-      call cpu_time(fin)
-      write(*,'(A, F8.2)') "CPU Time in printDISH [s]:", fin - start
+      call system_clock(t2)
+      write(*,'(A, T31, F11.3)') "CPU Time in printDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
+
+      if (inp%LSPACE) then
+        t1 = t2
+        call printMPDISH(ks)
+        write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+      end if
     end select
   end do
-  call cpu_time(finall)
+  call system_clock(ttot2)
   write(*,'(A)') "------------------------------------------------------------"
-  write(*,'(A, F10.2)') "All Time Elapsed [s]:", finall - startall
+  write(*,'(A, T31, F11.3)') "All Time Elapsed [s]:", MOD(ttot2-ttot1, cm) / REAL(cr)
 
 contains
 
   subroutine printWelcome()
-    ! Varsity
-    write(*,'(A)') "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-    write(*,'(A)') "|  ____      ____  ________  _____       ______    ___   ____    ____  ________    _________    ___         |"
-    write(*,'(A)') "| |_  _|    |_  _||_   __  ||_   _|    .' ___  | .'   `.|_   \  /   _||_   __  |  |  _   _  | .'   `.       |"
-    write(*,'(A)') "|   \ \  /\  / /    | |_ \_|  | |     / .'   \_|/  .-.  \ |   \/   |    | |_ \_|  |_/ | | \_|/  .-.  \      |"
-    write(*,'(A)') "|    \ \/  \/ /     |  _| _   | |   _ | |       | |   | | | |\  /| |    |  _| _       | |    | |   | |      |"
-    write(*,'(A)') "|     \  /\  /     _| |__/ | _| |__/ |\ `.___.'\\  `-'  /_| |_\/_| |_  _| |__/ |     _| |_   \  `-'  /      |"
-    write(*,'(A)') "|      \/  \/     |________||________| `.____ .' `.___.'|_____||_____||________|    |_____|   `.___.'       |"
-    write(*,'(A)') "|                         ____  ____  ________       ____  _____       _       ____    ____  ______     _   |"
-    write(*,'(A)') "|                        |_   ||   _||_   __  |     |_   \|_   _|     / \     |_   \  /   _||_   _ `.  | |  |"
-    write(*,'(A)') "|                          | |__| |    | |_ \_|______ |   \ | |      / _ \      |   \/   |    | | `. \ | |  |"
-    write(*,'(A)') "|                          |  __  |    |  _|  |______|| |\ \| |     / ___ \     | |\  /| |    | |  | | | |  |"
-    write(*,'(A)') "|                         _| |  | |_  _| |_          _| |_\   |_  _/ /   \ \_  _| |_\/_| |_  _| |_.' / |_|  |"
-    write(*,'(A)') "|                        |____||____||_____|        |_____|\____||____| |____||_____||_____||______.'  (_)  |"
-    write(*,'(A)') "| Version: Jan. 2023.                                                                                       |"
-    write(*,'(A)') "| Authors:                                                                                                  |"
-    write(*,'(A)') "| Big Thanks to:                                                                                            |"
-    write(*,'(A)') "|                                                                                                           |"
-    write(*,'(A)') "| Supported input paramters:                                                                                |"
-    write(*,'(A)') "|     bmin, bmax,                                                                                           |"
-    write(*,'(A)') "|     nsample, ntraj, nsw, nelm,                                                                            |"
-    write(*,'(A)') "|     temp, namdtime, potim,                                                                                |"
-    write(*,'(A)') "|     lhole, lshp, algo, algo_int, lcptxt,                                                                  |"
-    write(*,'(A)') "|     lspace, nacbasis, nacele,                                                                             |"
-    write(*,'(A)') "|     rundir, tbinit, diinit, spinit,                                                                       |"
-    write(*,'(A)') "|     debuglevel                                                                                            |"
-    write(*,'(A)') "| Supported input files:                                                                                    |"
-    write(*,'(A)') "|     inp, COUPCAR, EIGTXT, NATXT, INICON, DEPHTIME, ACSPACE                                                |"
-    write(*,'(A)') "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-    write(*,'(A)') "                                                                                                             "
+    implicit none
+    character(len=8)  :: date
+    character(len=10) :: time
+    character(len=5)  :: zone
+    ! Big
+    write(*,'(A)') "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    write(*,'(A)') "| __          ________ _      _____ ____  __          __ ______   _______ ____   |"
+    write(*,'(A)') "| \ \        / /  ____| |    / ____/ __ \|  \        /  |  ____| |__   __/ __ \  |"
+    write(*,'(A)') "|  \ \  /\  / /| |__  | |   | |   | |  | | \ \      / / | |__       | | | |  | | |"
+    write(*,'(A)') "|   \ \/  \/ / |  __| | |   | |   | |  | | |\ \    / /| |  __|      | | | |  | | |"
+    write(*,'(A)') "|    \  /\  /  | |____| |___| |___| |__| | | \ \  / / | | |____     | | | |__| | |"
+    write(*,'(A)') "|     \/_ \/ _ |______|______\_____\____/| |  \ \/ /  | |______|  _ |_|  \____/  |"
+    write(*,'(A)') "|      | |  | |  ____|    | \ | |   /\   | |   \  /   | |  __ \  | |             |"
+    write(*,'(A)') "|      | |__| | |__ ______|  \| |  /  \  | |    \/    | | |  | | | |             |"
+    write(*,'(A)') "|      |  __  |  __|______| . ` | / /\ \ | |          | | |  | | | |             |"
+    write(*,'(A)') "|      | |  | | |         | |\  |/ ____ \| |          | | |__| | |_|             |"
+    write(*,'(A)') "|      |_|  |_|_|         |_| \_/_/    \_\_|          |_|_____/  (_)             |"
+    write(*,'(A)') "|                                                                                |"
+    write(*,'(A)') "| Version: Jan. 2023.                                                            |"
+    write(*,'(A)') "| Authors:                                                                       |"
+    write(*,'(A)') "| Big Thanks to:                                                                 |"
+    write(*,'(A)') "|                                                                                |"
+    write(*,'(A)') "| Supported input paramters:                                                     |"
+    write(*,'(A)') "|     BMIN, BMAX,                                                                |"
+    write(*,'(A)') "|     MSAMPLE, NTRAJ, NSW, NELM,                                                 |"
+    write(*,'(A)') "|     TEMP, NAMDTIME, POTIM,                                                     |"
+    write(*,'(A)') "|     LHOLE, LSHP, ALGO, ALGO_INT, LCPTXT,                                       |"
+    write(*,'(A)') "|     LSPACE, NACBASIS, NACELE,                                                  |"
+    write(*,'(A)') "|     NPARDISH,                                                                  |"
+    write(*,'(A)') "|     RUNDIR, TBINIT, DIINIT, SPINIT,                                            |"
+    write(*,'(A)') "|     DEBUGLEVEL                                                                 |"
+    write(*,'(A)') "| Supported input files:                                                         |"
+    write(*,'(A)') "|     inp, COUPCAR, EIGTXT, NATXT, INICON, DEPHTIME, ACSPACE                     |"
+    write(*,'(A)') "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    write(*,'(A)') "                                                                                  "
+    call date_and_time(date, time, zone)
+    write(*,'(A21,X,A4,".",A2,".",A2,X,A2,":",A2,":",A6,X,"UTC",A5,/)') 'The program starts at',          &
+                                                                        date(1:4), date(5:6), date(7:8),  &
+                                                                        time(1:2), time(3:4), time(5:10), &
+                                                                        zone
   end subroutine
-
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
 end Program
