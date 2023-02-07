@@ -1,21 +1,21 @@
 #-------------------------------------------------------------------------------
 # defaults
 #-------------------------------------------------------------------------------
-FC       = ifort # -assume byterecl 
+# FC       = ifort # -assume byterecl 
 # FC       = gfortran
-# FC       = x86_64-w64-mingw32-gfortran
+FC       = x86_64-w64-mingw32-gfortran
 
-FFLAGS   = -g -O3 -traceback  -check bounds  -qopenmp # -parallel -heap-arrays
-# FFLAGS   = -g -O3 -fbacktrace -fbounds-check -fopenmp # -Wall -Wextra -Wconversion
+# FFLAGS   = -g -O3 -traceback  -check bounds  -qopenmp # -parallel -heap-arrays
+FFLAGS   = -g -O3 -fbacktrace -fbounds-check -fopenmp # -Wall -Wextra -Wconversion
 MAKE     = make
 
-MKL_PATH = $(MKLROOT)/lib/intel64
-MKL_INC  = $(MKLROOT)/include
-MKLFLAG  = -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lmkl_lapack95_lp64 -liomp5 -lpthread
-BLAS     = $(MKL_PATH)/libmkl_blas95_lp64.a
-# BLAS     = libblas.dll.a
-LAPACK   = $(MKL_PATH)/libmkl_lapack95_lp64.a
-# LAPACK   = liblapack.dll.a
+# MKL_PATH = $(MKLROOT)/lib/intel64
+# MKL_INC  = $(MKLROOT)/include
+# MKLFLAG  = -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lmkl_lapack95_lp64 -liomp5 -lpthread
+# BLAS     = $(MKL_PATH)/libmkl_blas95_lp64.a
+BLAS     = libblas.dll.a
+# LAPACK   = $(MKL_PATH)/libmkl_lapack95_lp64.a
+LAPACK   = liblapack.dll.a
 LLIBS    = $(BLAS) $(LAPACK) 
 
 #-------------------------------------------------------------------------------
@@ -40,8 +40,8 @@ EXE = hfnamd
 # Targets
 #-------------------------------------------------------------------------------
 tdm:	$(OBJ)
-	$(FC) $(FFLAGS) -o $(EXE) $(OBJ) -I$(MKL_INC) -L$(MKL_PATH) $(MKLFLAG) 
-# $(FC) $(FFLAGS) -o $(EXE) $(OBJ) $(LLIBS)
+# $(FC) $(FFLAGS) -o $(EXE) $(OBJ) -I$(MKL_INC) -L$(MKL_PATH) $(MKLFLAG) 
+	$(FC) $(FFLAGS) -o $(EXE) $(OBJ) $(LLIBS)
 
 clean:
 	rm -f *.mod

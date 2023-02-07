@@ -239,7 +239,8 @@ contains
         end select
         ham = ks%ham_c
 
-        !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i) IF (inp%NPARDISH > 1)
+        ! TODO init conflict with OMP
+        !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
         do i = 1, inp%NTRAJ
           select case (inp%ALGO_INT)
           case (10)

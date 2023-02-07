@@ -127,7 +127,7 @@ contains
     write(*,'(A)') "|                                                                                |"
     write(*,'(A)') "| Supported input paramters:                                                     |"
     write(*,'(A)') "|     BMIN, BMAX,                                                                |"
-    write(*,'(A)') "|     MSAMPLE, NTRAJ, NSW, NELM,                                                 |"
+    write(*,'(A)') "|     NSAMPLE, NTRAJ, NSW, NELM,                                                 |"
     write(*,'(A)') "|     TEMP, NAMDTIME, POTIM,                                                     |"
     write(*,'(A)') "|     LHOLE, LSHP, ALGO, ALGO_INT, LCPTXT,                                       |"
     write(*,'(A)') "|     LSPACE, NACBASIS, NACELE,                                                  |"

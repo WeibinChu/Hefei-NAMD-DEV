@@ -172,32 +172,6 @@ contains
           this%INIBAND_A = this%INIBAND_A - bmin + 1
         end if
       end if
-      
-      ! DEPHTIME
-      if (algo == 'DISH') then
-        allocate(this%DEPHMATR(bmax - bmin + 1, bmax - bmin + 1))   !! read in the pure dephasing time matrix, the diagonal elements are zero
-        inquire(file=diinit, exist=lext)
-        if (.NOT. lext) then
-          write(*,*) "[E] IOError: File containing initial conditions of DISH does NOT exist!"
-          stop
-        else
-          open(unit=10, file=diinit, action='read')
-          read(unit=10, fmt=*) ((this%DEPHMATR(i,j), j=1, bmax - bmin + 1), i=1, bmax - bmin + 1)
-          do i = 1, bmax - bmin + 1
-            do j = 1, bmax - bmin + 1
-              if (i /= j) then
-                this%DEPHMATR(j,i) = 1.0_q / this%DEPHMATR(j, i)
-              end if
-            end do
-          end do
-          ! do i=1, bmax - bmin + 1
-          !   do j=1, bmax - bmin + 1
-          !     read(unit=10,fmt=*) this%DEPHMATR(i, j)
-          !   end do
-          ! end do
-          close(10)
-        end if
-      end if
 
       ! ACSPACE
       if (lspace) then
@@ -218,6 +192,27 @@ contains
         allocate(this%BASIS(bmax - bmin + 1, 1))
         this%BASIS = reshape([(i, i=bmin, bmax)], shape=[1,bmax-bmin+1])
         this%NBASIS = bmax - bmin + 1
+      end if
+
+      ! DEPHTIME
+      if (algo == 'DISH') then
+        allocate(this%DEPHMATR(this%NBASIS, this%NBASIS))   !! read in the pure dephasing time matrix, the diagonal elements are zero
+        inquire(file=diinit, exist=lext)
+        if (.NOT. lext) then
+          write(*,*) "[E] IOError: File containing initial conditions of DISH does NOT exist!"
+          stop
+        else
+          open(unit=10, file=diinit, action='read')
+          read(unit=10, fmt=*) ((this%DEPHMATR(i,j), j=1, this%NBASIS), i=1, this%NBASIS)
+          do i = 1, this%NBASIS
+            do j = 1, this%NBASIS
+              if (i /= j) then
+                this%DEPHMATR(j,i) = 1.0_q / this%DEPHMATR(j,i)
+              end if
+            end do
+          end do
+          close(10)
+        end if
       end if
 
       ! assign the parameters
@@ -247,7 +242,7 @@ contains
 
       this%LSPACE   = lspace
       this%NACBASIS = nacbasis
-      this%NACELE= nacele
+      this%NACELE   = nacele
 
       call this%checkUserInp()
     end subroutine
