@@ -18,6 +18,8 @@ BLAS     = libblas.dll.a
 LAPACK   = liblapack.dll.a
 MPI      = libmsmpi.a
 LLIBS    = $(BLAS) $(LAPACK) $(MPI)
+DMPI     = # -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI 
+DMKL     = -DENABLEMKL
 
 #-------------------------------------------------------------------------------
 # Src
@@ -35,11 +37,11 @@ EXE = hfnamd
 #-------------------------------------------------------------------------------
 .SUFFIXES: .o .f90
 .f90.o:
-	$(FC) $(FFLAGS) -c $< -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI
+	$(FC) $(FFLAGS) -c $< 
 
 .SUFFIXES: .o .F90
 .F90.o:
-	$(FC) $(FFLAGS) -c $< -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI
+	$(FC) $(FFLAGS) -c $< $(DMPI) $(DMKL)
 
 
 #-------------------------------------------------------------------------------

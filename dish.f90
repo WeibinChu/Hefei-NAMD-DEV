@@ -270,16 +270,16 @@ contains
           case (10)
             if (.NOT. init) then
               ksi = ks_list(i)
-              ksi%psi_n = ksi%psi_p + HamPsi(ham, ksi%psi_p, 'C')
+              ksi%psi_n = ksi%psi_p + HamPsi(ham, ksi%psi_p, 'T')
               ksi%psi_p = ksi%psi_c
               ksi%psi_c = ksi%psi_n
               ks_list(i) = ksi
             else
-              ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'C')
+              ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
               init = .FALSE.
             end if
           case (11)
-            ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'C')
+            ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
           case default
             ks_list(i)%psi_c = HamPsi(ham, ks_list(i)%psi_c, 'N')
           end select

@@ -202,6 +202,10 @@ contains
     complex(kind=q), dimension(ks%ndim,ks%ndim) :: C1, C2
     ! complex(kind=q), dimension(ks%ndim)         :: Y
 
+#ifndef ENABLEMKL
+    write(*,*) "[E] Diagnization Algorithm is not implemented without MKL."
+    stop
+#else
     !! https://netlib.org/lapack/explore-html
     !! zHEEV(JOBZ,UPLO,N,A,LDA,W,WORK,LWORK,RWORK,INFO)
     LWORK = 2*ks%ndim - 1
@@ -219,15 +223,16 @@ contains
 
     !! zGEMM(TRANSA,TRANSB,M,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
     !! C2 = matmul(matmul(conjg(ks%ham_c), exp_eig), transpose(ks%ham_c)) !! H_ij
+    !! JOBZ='C' <=> conjg * transpose
     C1 = con%cero
     C2 = con%cero
-    call zGEMM('C', 'N',                                             &
-              ks%ndim, ks%ndim, ks%ndim, con%uno, ks%ham_c, ks%ndim, &
-              exp_eig, ks%ndim,                                      &
+    call zGEMM('N', 'N',                                                    &
+              ks%ndim, ks%ndim, ks%ndim, con%uno, conjg(ks%ham_c), ks%ndim, &
+              exp_eig, ks%ndim,                                             &
               con%cero, C1, ks%ndim)
-    call zGEMM('N', 'T',                                             &
-              ks%ndim, ks%ndim, ks%ndim, con%uno, C1, ks%ndim,       &
-              ks%ham_c, ks%ndim,                                     &
+    call zGEMM('N', 'T',                                                    &
+              ks%ndim, ks%ndim, ks%ndim, con%uno, C1, ks%ndim,              &
+              ks%ham_c, ks%ndim,                                            &
               con%cero, C2, ks%ndim)
 
     ks%ham_c = C2
@@ -238,9 +243,10 @@ contains
     !           ks%psi_c, 1,                            &
     !           con%cero, Y, 1)
     ! ks%psi_c = Y
-
+#endif
   end subroutine
 
+#ifndef ENABLEMKL
   function HamPsi(ham, psi, jobz)
     implicit none
     complex(kind=q), intent(in), dimension(:,:) :: ham
@@ -252,12 +258,12 @@ contains
     select case (jobz)
     case ('N')
       HamPsi = matmul(ham, psi)
-    case ('C')
+    case ('T')
       HamPsi = matmul(transpose(ham), psi)
     end select
   end function
-
-  function HamPsiBlas(ham, psi, jobz)
+#else
+  function HamPsi(ham, psi, jobz) result(HamPsiBlas)
     implicit none
     complex(kind=q), intent(in), dimension(:,:) :: ham
     complex(kind=q), intent(in), dimension(:)   :: psi
@@ -275,6 +281,7 @@ contains
               con%cero, Y, 1)
     HamPsiBlas = Y
   end function
+#endif
 
   subroutine PropagationEle(ks, tion)
     implicit none

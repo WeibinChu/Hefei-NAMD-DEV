@@ -146,7 +146,7 @@ module fssh
           ks%psi_p = ks%psi_c
           call make_hamil(tion, tele, ks)
           call DiagonizeMat(ks, edt)
-          ks%psi_c = HamPsiBlas(ks%ham_c, ks%psi_c, 'N')
+          ks%psi_c = HamPsi(ks%ham_c, ks%psi_c, 'N')
         end select
         if (inp%LSHP) call calcProb(tion, indion, tele, ks)
       end do
