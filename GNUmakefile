@@ -16,7 +16,8 @@ MAKE     = make
 BLAS     = libblas.dll.a
 # LAPACK   = $(MKL_PATH)/libmkl_lapack95_lp64.a
 LAPACK   = liblapack.dll.a
-LLIBS    = $(BLAS) $(LAPACK) 
+MPI      = libmsmpi.a
+LLIBS    = $(BLAS) $(LAPACK) $(MPI)
 
 #-------------------------------------------------------------------------------
 # Src
@@ -34,7 +35,12 @@ EXE = hfnamd
 #-------------------------------------------------------------------------------
 .SUFFIXES: .o .f90
 .f90.o:
-	$(FC) $(FFLAGS) -c $<
+	$(FC) $(FFLAGS) -c $< -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI
+
+.SUFFIXES: .o .F90
+.F90.o:
+	$(FC) $(FFLAGS) -c $< -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI
+
 
 #-------------------------------------------------------------------------------
 # Targets
@@ -45,6 +51,7 @@ tdm:	$(OBJ)
 
 clean:
 	rm -f *.mod
+	cp link/*.mod .
 	rm -f $(OBJ)
 tar:
 	tar -czvf hfnamd.tgz *.f90 Makefile

@@ -6,6 +6,9 @@ module fileio
 
   type, private :: namdInfo
     logical, private :: isCreated = .false.
+    integer :: NPROG
+    integer :: IPROG
+
     integer :: BMIN
     integer :: BMAX
     integer :: NBADNS
@@ -79,10 +82,11 @@ contains
       this%LORB = lorb
     end subroutine
 
-    subroutine getUserInp(this)
+    subroutine getUserInp(this, nprog, iprog)
       implicit none
 
       class(namdInfo), intent(inout) :: this
+      integer, intent(in) :: nprog, iprog
 
       ! local variables with the same name as those in "inp"
       integer :: bmin
@@ -140,8 +144,8 @@ contains
       close(unit=8)
 
       ! omp
-      nthread = MIN(npardish, omp_get_max_threads())
-      call omp_set_num_threads(nthread)
+      ! nthread = MIN(npardish, omp_get_max_threads())
+      ! call omp_set_num_threads(nthread)
 
       ! DEBUGLEVEL
       select case (debuglevel)
@@ -216,12 +220,15 @@ contains
       end if
 
       ! assign the parameters
+      this%NPROG    = nprog
+      this%IPROG    = iprog
+
       this%BMIN     = bmin
       this%BMAX     = bmax
       this%NBADNS   = bmax - bmin + 1
 
       this%NSW      = nsw
-      this%NTRAJ    = ntraj
+      this%NTRAJ    = ceiling(REAL(ntraj)/nprog)*nprog
       this%NELM     = nelm
       this%NSAMPLE  = nsample
 
@@ -296,7 +303,7 @@ contains
       write(*,'(A30,A3,L8)') 'LSHP',     ' = ', this%LSHP
       write(*,'(A30,A3,A8)') 'ALGO',     ' = ', TRIM(ADJUSTL(this%ALGO))
       write(*,'(A30,A3,I8)') 'ALGO_INT', ' = ', this%ALGO_INT
-      if (this%ALGO == 'DISH') write(*,'(A30,A3,I8)') 'NPARDISH', ' = ', this%NPARDISH
+      if (this%ALGO == 'DISH') write(*,'(A30,A3,I8)') 'NPARDISH', ' = ', this%NPROG
       write(*,'(A30,A3,L8)') 'LCPTXT',   ' = ', this%LCPTXT
       write(*,'(A)') ""
       write(*,'(A30,A3,L8)') 'LSPACE',   ' = ', this%LSPACE

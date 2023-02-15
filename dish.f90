@@ -6,6 +6,9 @@ module dish
   use couplings
   use hamil
   use TimeProp
+#ifdef ENABLEMPI
+  use mpi
+#endif
   implicit none
 
   private :: calcDect, whichToDec, projector
@@ -115,7 +118,7 @@ contains
       ks%psi_c(which) = con%uno
 
       if ((.NOT. fgend) .AND. which == iend) then
-        ks0%recom_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%recom_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q
+        ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q/inp%NTRAJ
         fgend = .TRUE.
       end if
 
@@ -150,7 +153,8 @@ contains
 
         if (lower <= r .AND. r < upper) then
           if ((.NOT. fgend) .AND. i == iend) then
-            ks0%recom_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%recom_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q
+            ! Here use decimal part of dish_pops to store the recom_pops matrix.
+            ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q/inp%NTRAJ
             fgend = .TRUE.
           end if
           cstat = i !! Hop to i
@@ -168,18 +172,38 @@ contains
     type(TDKS), intent(inout) :: ks
     type(overlap), intent(in) :: olap
 
-    integer :: i, tion, indion, tele
+    integer :: i, N, tion, indion, tele
     logical :: init
     real(kind=q) :: edt, norm
     complex(kind=q), dimension(ks%ndim,ks%ndim) :: ham
-    type(TDKS) :: ksi, ks_list(inp%NTRAJ)
+    type(TDKS) :: ksi
 
-    logical :: fgend(inp%NTRAJ) !! recomb indicator, tells recomb from which state at which time
     integer :: istat, iend
-    integer :: which, cstat(inp%NTRAJ)
+    integer :: which
+    type(TDKS), allocatable, dimension(:) :: ks_list
+    logical,    allocatable, dimension(:) :: fgend !! recomb indicator, tells recomb from which state at which time
+    integer,    allocatable, dimension(:) :: cstat
     integer, dimension(ks%ndim)                :: shuffle
     real(kind=q), dimension(ks%ndim)           :: COEFFISQ  !! |c_i(t)|^2
     real(kind=q), dimension(ks%ndim)           :: DECOTIME  !! tau_i(t)
+
+    integer :: ierr
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! A = Diag, B = Hpsi, C = SH, D = write
+    ! #PROG  1  A...B..A...B..C....D
+    !        2  A...B..A...B..C....
+    !        3  A...B..A...B..C....
+    !        4  A...B..A...B..C....
+    !        5  A...B..A...B..C....
+#ifdef ENABLEMPI
+    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+#endif
+
+    N = ceiling(REAL(inp%NTRAJ)/inp%NPROG)
+    allocate(ks_list(N))
+    allocate(fgend(N))
+    allocate(cstat(N))
 
     ! At the first step, current state always equal initial state
     istat = inp%INIBAND
@@ -194,11 +218,11 @@ contains
     allocate(ks%eigKs(ks%ndim, inp%NSW))
     allocate(ks%NAcoup(ks%ndim, ks%ndim, inp%NSW))
     allocate(ks%dish_pops(ks%ndim, inp%NAMDTIME))
-    allocate(ks%recom_pops(ks%ndim,inp%NAMDTIME))
+    if (inp%IPROG == 0) allocate(ks%recom_pops(ks%ndim,inp%NAMDTIME))
     ks%eigKs = olap%Eig
     ks%NAcoup = olap%Dij
     ks%dish_pops = 0.0_q
-    ks%recom_pops = 0.0_q
+    if (inp%IPROG == 0) ks%recom_pops = 0.0_q
 
     shuffle = [(i, i=1,ks%ndim)]
 
@@ -240,8 +264,8 @@ contains
         ham = ks%ham_c
 
         ! TODO init conflict with OMP
-        !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
-        do i = 1, inp%NTRAJ
+        !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
+        do i = 1, N
           select case (inp%ALGO_INT)
           case (10)
             if (.NOT. init) then
@@ -260,11 +284,11 @@ contains
             ks_list(i)%psi_c = HamPsi(ham, ks_list(i)%psi_c, 'N')
           end select
         end do
-        !$OMP END PARALLEL DO
+        !!$OMP END PARALLEL DO
       end do
      
-      !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
-      do i = 1, inp%NTRAJ
+      !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
+      do i = 1, N
         ksi = ks_list(i)
         norm = REAL(SUM(CONJG(ksi%psi_c) * ksi%psi_c), kind=q) 
         if (norm <= 0.99_q .OR. norm >= 1.01_q)  then
@@ -281,16 +305,32 @@ contains
           call projector(ksi, COEFFISQ, which, tion, indion, cstat(i), iend, fgend(i), ks)
         end if
         
-        ks%dish_pops(cstat(i), indion+1) = ks%dish_pops(cstat(i), indion+1) + 1.0_q
+        ks%dish_pops(cstat(i), indion+1) = ks%dish_pops(cstat(i), indion+1) + 3.0_q
 
         ks_list(i) = ksi
       end do
-      !$OMP END PARALLEL DO
+      !!$OMP END PARALLEL DO
     end do
 
-    ks%dish_pops = ks%dish_pops / inp%NTRAJ
+#ifdef ENABLEMPI
+    ! MPI_REDUCE(SENDBUF, RECVBUF, COUNT, DATATYPE, OP, ROOT, COMM, IERROR)
+    ! Buffer parameters inbuf and inoutbuf must not be aliased
+    ! use +0 bypass it.
+    if (inp%NPROG > 1) then
+      call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, ks%ndim*inp%NAMDTIME, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+    end if
+    !call MPI_REDUCE(ks%recom_pops+0.0_q,ks%recom_pops,ks%ndim*inp%NAMDTIME, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+    if (inp%IPROG == 0) then
+#endif
+    ks%recom_pops = MOD(ks%dish_pops, 1.0_q)
+    ks%dish_pops = NINT(ks%dish_pops/3) / REAL(inp%NTRAJ, kind=q)
+    ! ks%dish_pops = ks%dish_pops / inp%NTRAJ
     ks%dish_pops(inp%INIBAND, 1) = 1.0_q
-    ks%recom_pops = ks%recom_pops / inp%NTRAJ
+    ! ks%recom_pops = ks%recom_pops / inp%NTRAJ
+#ifdef ENABLEMPI
+    end if
+    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+#endif
   end subroutine
 
 

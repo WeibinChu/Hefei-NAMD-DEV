@@ -5,6 +5,7 @@ Program main
   use hamil
   use fssh
   use dish
+  use mpi
 
   implicit none
 
@@ -12,16 +13,23 @@ Program main
   type(overlap) :: olap, olap_sp
 
   integer :: ns, cr, cm, t1, t2, ttot1, ttot2
+  integer :: nprog = 1, iprog = 0, ierr
+
+#ifdef ENABLEMPI
+  call MPI_INIT(ierr)
+  call MPI_COMM_SIZE(MPI_COMM_WORLD, nprog, ierr)
+  call MPI_COMM_RANK(MPI_COMM_WORLD, iprog, ierr)
+#endif
 
   call system_clock(count_rate=cr)
   call system_clock(count_max=cm)
   
-  call printWelcome()
+  if (iprog == 0) call printWelcome()
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! First, get user inputs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   call inp%getInstance()
-  call inp%getUserInp()
+  call inp%getUserInp(nprog, iprog)
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Secondly, get couplings
@@ -39,66 +47,74 @@ Program main
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   do ns=1, inp%NSAMPLE
     call inp%setIni(ns)
-    call inp%printUserInp()
+    if (iprog == 0) call inp%printUserInp()
 
     ! initiate KS matrix
     call system_clock(t1)
     call initTDKS(ks, olap)
     call system_clock(t2)
-    write(*,'(A, T31, F11.3)') "CPU Time in initTDKS [s]:", MOD(t2-t1, cm) / REAL(cr)
+    if (iprog == 0) write(*,'(A, T31, F11.3)') "CPU Time in initTDKS [s]:", MOD(t2-t1, cm) / REAL(cr)
 
     select case(inp%ALGO)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     case ('FSSH')
-      ! Time propagation
-      t1 = t2
-      call runSE(ks)
-      call system_clock(t2)
-      write(*,'(A, T31, F11.3)') "CPU Time in runSE [s]:", MOD(t2-t1, cm) / REAL(cr)
-
-      t1 = t2
-      call printSE(ks)
-      call system_clock(t2)
-      write(*,'(A, T31, F11.3)') "CPU Time in printSE [s]:", MOD(t2-t1, cm) / REAL(cr)
-      ! Run surface hopping
-      if (inp%LSHP) then
+      if (iprog == 0) then
+        ! Time propagation
         t1 = t2
-        call runSH(ks)
+        call runSE(ks)
         call system_clock(t2)
-        write(*,'(A, T31, F11.3)') "CPU Time in runSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+        write(*,'(A, T31, F11.3)') "CPU Time in runSE [s]:", MOD(t2-t1, cm) / REAL(cr)
 
         t1 = t2
-        call printSH(ks)
+        call printSE(ks)
         call system_clock(t2)
-        write(*,'(A, T31, F11.3)') "CPU Time in printSH [s]:", MOD(t2-t1, cm) / REAL(cr)
-      end if
-      if (inp%LSPACE) then
-        t1 = t2
-        call printMPFSSH(ks)
-        write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+        write(*,'(A, T31, F11.3)') "CPU Time in printSE [s]:", MOD(t2-t1, cm) / REAL(cr)
+        ! Run surface hopping
+        if (inp%LSHP) then
+          t1 = t2
+          call runSH(ks)
+          call system_clock(t2)
+          write(*,'(A, T31, F11.3)') "CPU Time in runSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+
+          t1 = t2
+          call printSH(ks)
+          call system_clock(t2)
+          write(*,'(A, T31, F11.3)') "CPU Time in printSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+        end if
+        if (inp%LSPACE) then
+          t1 = t2
+          call printMPFSSH(ks)
+          write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+        end if
       end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     case ('DISH')
       t1 = t2
       call runDISH(ks, olap)
       call system_clock(t2)
-      write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
+      if (iprog == 0) then
+        write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
 
-      t1 = t2
-      call printDISH(ks)
-      call system_clock(t2)
-      write(*,'(A, T31, F11.3)') "CPU Time in printDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
-
-      if (inp%LSPACE) then
         t1 = t2
-        call printMPDISH(ks)
-        write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+        call printDISH(ks)
+        call system_clock(t2)
+        write(*,'(A, T31, F11.3)') "CPU Time in printDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
+
+        if (inp%LSPACE) then
+          t1 = t2
+          call printMPDISH(ks)
+          write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+        end if
       end if
     end select
   end do
   call system_clock(ttot2)
-  write(*,'(A)') "------------------------------------------------------------"
-  write(*,'(A, T31, F11.3)') "All Time Elapsed [s]:", MOD(ttot2-ttot1, cm) / REAL(cr)
+  if (iprog == 0) write(*,'(A)') "------------------------------------------------------------"
+  if (iprog == 0) write(*,'(A, T31, F11.3)') "All Time Elapsed [s]:", MOD(ttot2-ttot1, cm) / REAL(cr)
+
+#ifdef ENABLEMPI
+  call MPI_FINALIZE(ierr)
+#endif
 
 contains
 

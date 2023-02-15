@@ -1,4 +1,5 @@
 *.o
 *.mod
 lib/
-test/
+test*/
+link/
