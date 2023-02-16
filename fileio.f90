@@ -38,6 +38,7 @@ module fileio
     logical :: LSHP
     character(len=256) :: ALGO !! SH Algorrithm
     integer :: ALGO_INT
+    logical :: LBINOUT
     logical :: LCPTXT
     logical :: LSPACE
     ! running directories
@@ -111,6 +112,7 @@ contains
       integer :: algo_int       = 0
       logical :: lcptxt         = .TRUE.
       logical :: lspace         = .FALSE.
+      logical :: lbinout        = .FALSE.
       integer :: npardish       = 1
       ! running directories
       character(len=256) :: rundir = 'run'
@@ -125,7 +127,7 @@ contains
                           temp, namdtime, potim,               &
                           lhole, lshp, algo, algo_int, lcptxt, &
                           lspace, nacbasis, nacele,            &
-                          npardish,                            &
+                          npardish, lbinout,                   &
                           rundir, tbinit, diinit, spinit,      &
                           debuglevel
 
@@ -242,6 +244,7 @@ contains
       this%ALGO     = algo
       this%ALGO_INT = algo_int
       this%NPARDISH = nthread
+      this%LBINOUT  = lbinout
 
       this%RUNDIR   = trim(rundir)
       this%TBINIT   = trim(tbinit)
@@ -304,6 +307,7 @@ contains
       write(*,'(A30,A3,A8)') 'ALGO',     ' = ', TRIM(ADJUSTL(this%ALGO))
       write(*,'(A30,A3,I8)') 'ALGO_INT', ' = ', this%ALGO_INT
       if (this%ALGO == 'DISH') write(*,'(A30,A3,I8)') 'NPARDISH', ' = ', this%NPROG
+      write(*,'(A30,A3,L8)') 'LBINOUT',  ' = ', this%LBINOUT
       write(*,'(A30,A3,L8)') 'LCPTXT',   ' = ', this%LCPTXT
       write(*,'(A)') ""
       write(*,'(A30,A3,L8)') 'LSPACE',   ' = ', this%LSPACE

@@ -341,9 +341,60 @@ contains
     integer :: i, tion, indion, ierr
     character(len=48) :: buf
     character(len=48) :: out_fmt
+    real(kind=q), allocatable, dimension(:,:) :: avgene
 
     write(buf, *) inp%NAMDTINI
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  ks%ndim
+
+    if (inp%LBINOUT) then
+      allocate(avgene(inp%NAMDTIME, 3)) ! tion, time, avgene
+      do indion=1, inp%NAMDTIME
+        tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
+        avgene(:,i) = [REAL(tion, kind=q), &
+                       indion * inp%POTIM, &
+                       SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
+      end do
+
+      open(unit=27,                                   &
+           file='AVGENE.bin',                         &
+           form='unformatted',                        &
+           status='unknown',                          &
+           access='direct',                           &
+           recl=kind(0.0_q) * 3 * inp%NAMDTIME,       &
+           action='write',                            &
+           iostat=ierr)
+      open(unit=24,                                   &
+           file='SHPROP.bin.' // trim(adjustl(buf)),  &
+           form='unformatted',                        &
+           status='unknown',                          &
+           access='direct',                           &
+           recl=kind(0.0_q) * ks%ndim * inp%NAMDTIME, &
+           action='write',                            &
+           iostat=ierr)
+      open(unit=28,                                   &
+           file='RECOMB.bin.' // trim(adjustl(buf)),  &
+           form='unformatted',                        &
+           status='unknown',                          &
+           access='direct',                           &
+           recl=kind(0.0_q) * ks%ndim * inp%NAMDTIME, &
+           action='write',                            &
+           iostat=ierr)
+      if (ierr /= 0) then
+        write(*,*) "[E] IOError: SHPROP.bin file I/O error!"
+        stop
+      end if
+
+      write(unit=27,rec=1) avgene
+      write(unit=24,rec=1) ks%dish_pops
+      write(unit=28,rec=1) ks%recom_pops
+
+      deallocate(avgene)
+      close(27)
+      close(24)
+      close(28)
+
+      return
+    end if
 
     open(unit=24, file='SHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
     open(unit=28, file='RECOMB.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
@@ -381,12 +432,6 @@ contains
     write(buf, *) inp%NAMDTINI
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  inp%NBADNS
 
-    open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
-    if (ierr /= 0) then
-      write(*,*) "[E] IOError: MPSHPROP file I/O error!"
-      stop
-    end if
-
     ks%dish_mppops = 0.0_q
     do i=1, ks%ndim
       bands = inp%BASIS(:,i) - inp%BMIN + 1
@@ -395,6 +440,31 @@ contains
                                       ks%dish_pops(i,:)
       end do
     end do
+
+    if (inp%LBINOUT) then
+      open(unit=52,                                      &
+           file='MPSHPROP.bin.' // trim(adjustl(buf)),   &
+           form='unformatted',                           &
+           status='unknown',                             &
+           access='direct',                              &
+           recl=kind(0.0_q) * inp%NBADNS * inp%NAMDTIME, &
+           action='write',                               &
+           iostat=ierr)
+      if (ierr /= 0) then
+        write(*,*) "[E] IOError: MPSHPROP.bin file I/O error!"
+        stop
+      end if
+
+      write(unit=52,rec=1) ks%dish_mppops
+      
+      close(52)
+    end if
+
+    open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
+    if (ierr /= 0) then
+      write(*,*) "[E] IOError: MPSHPROP file I/O error!"
+      stop
+    end if
 
     do indion=1, inp%NAMDTIME
       tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2)
