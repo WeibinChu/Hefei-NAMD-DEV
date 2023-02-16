@@ -147,7 +147,7 @@ contains
     write(*,'(A)') "|     TEMP, NAMDTIME, POTIM,                                                     |"
     write(*,'(A)') "|     LHOLE, LSHP, ALGO, ALGO_INT, LCPTXT,                                       |"
     write(*,'(A)') "|     LSPACE, NACBASIS, NACELE,                                                  |"
-    write(*,'(A)') "|     NPARDISH,                                                                  |"
+    write(*,'(A)') "|     NPARDISH, LBINOUT,                                                         |"
     write(*,'(A)') "|     RUNDIR, TBINIT, DIINIT, SPINIT,                                            |"
     write(*,'(A)') "|     DEBUGLEVEL                                                                 |"
     write(*,'(A)') "| Supported input files:                                                         |"

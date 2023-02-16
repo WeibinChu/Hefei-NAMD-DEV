@@ -259,7 +259,7 @@ contains
 
     subroutine checkUserInp(this)
       implicit none
-      class(namdInfo), intent(inout) :: this
+      class(namdInfo), intent(in) :: this
 
       integer :: i 
 

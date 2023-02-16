@@ -16,7 +16,7 @@ module fssh
     implicit none
 
     integer, intent(in) :: indion, cstat
-    integer, intent(inout) :: which
+    integer, intent(out) :: which
     type(TDKS), intent(in) :: ks
 
     integer :: i

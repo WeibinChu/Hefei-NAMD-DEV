@@ -214,6 +214,8 @@ contains
 
     deallocate(ks%eigKs)
     deallocate(ks%NAcoup)
+    deallocate(ks%dish_pops)
+    deallocate(ks%recom_pops)
     ks_list = ks
     allocate(ks%eigKs(ks%ndim, inp%NSW))
     allocate(ks%NAcoup(ks%ndim, ks%ndim, inp%NSW))
@@ -327,6 +329,11 @@ contains
     ! ks%dish_pops = ks%dish_pops / inp%NTRAJ
     ks%dish_pops(inp%INIBAND, 1) = 1.0_q
     ! ks%recom_pops = ks%recom_pops / inp%NTRAJ
+
+    deallocate(ks_list)
+    deallocate(fgend)
+    deallocate(cstat)
+
 #ifdef ENABLEMPI
     end if
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -356,7 +363,7 @@ contains
       end do
 
       open(unit=27,                                   &
-           file='AVGENE.bin',                         &
+           file='AVGENE.bin.' // trim(adjustl(buf)),  &
            form='unformatted',                        &
            status='unknown',                          &
            access='direct',                           &
@@ -458,6 +465,7 @@ contains
       write(unit=52,rec=1) ks%dish_mppops
       
       close(52)
+      return
     end if
 
     open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
