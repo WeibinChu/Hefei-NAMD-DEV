@@ -214,6 +214,8 @@ contains
 
     deallocate(ks%eigKs)
     deallocate(ks%NAcoup)
+    deallocate(ks%dish_pops)
+    deallocate(ks%recom_pops)
     ks_list = ks
     allocate(ks%eigKs(ks%ndim, inp%NSW))
     allocate(ks%NAcoup(ks%ndim, ks%ndim, inp%NSW))
@@ -327,6 +329,11 @@ contains
     ! ks%dish_pops = ks%dish_pops / inp%NTRAJ
     ks%dish_pops(inp%INIBAND, 1) = 1.0_q
     ! ks%recom_pops = ks%recom_pops / inp%NTRAJ
+
+    deallocate(ks_list)
+    deallocate(fgend)
+    deallocate(cstat)
+
 #ifdef ENABLEMPI
     end if
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -347,16 +354,16 @@ contains
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  ks%ndim
 
     if (inp%LBINOUT) then
-      allocate(avgene(inp%NAMDTIME, 3)) ! tion, time, avgene
+      allocate(avgene(3, inp%NAMDTIME)) ! tion, time, avgene
       do indion=1, inp%NAMDTIME
         tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
-        avgene(:,i) = [REAL(tion, kind=q), &
-                       indion * inp%POTIM, &
-                       SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
+        avgene(:,indion) = [REAL(tion, kind=q), &
+                            indion * inp%POTIM, &
+                            SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
       end do
 
       open(unit=27,                                   &
-           file='AVGENE.bin',                         &
+           file='AVGENE.bin.' // trim(adjustl(buf)),  &
            form='unformatted',                        &
            status='unknown',                          &
            access='direct',                           &
@@ -458,6 +465,7 @@ contains
       write(unit=52,rec=1) ks%dish_mppops
       
       close(52)
+      return
     end if
 
     open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)

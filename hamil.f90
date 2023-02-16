@@ -48,7 +48,7 @@ contains
   subroutine initTDKS(ks, olap)
     implicit none
 
-    type(TDKS), intent(out)  :: ks
+    type(TDKS), intent(inout)  :: ks
     type(overlap), intent(in)  :: olap
 
     integer :: N
@@ -80,6 +80,8 @@ contains
         end if
       case ('DISH')
         allocate(ks%dish_decmoment(N))
+        allocate(ks%dish_pops(1,1))  ! this is only for formatting, 
+        allocate(ks%recom_pops(1,1)) ! will be reallocated.
         if (inp%LSPACE) then
           allocate(ks%dish_mppops(inp%NBADNS, inp%NAMDTIME))
         end if
