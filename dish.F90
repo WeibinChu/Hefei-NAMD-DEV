@@ -354,12 +354,12 @@ contains
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  ks%ndim
 
     if (inp%LBINOUT) then
-      allocate(avgene(inp%NAMDTIME, 3)) ! tion, time, avgene
+      allocate(avgene(3, inp%NAMDTIME)) ! tion, time, avgene
       do indion=1, inp%NAMDTIME
         tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
-        avgene(:,i) = [REAL(tion, kind=q), &
-                       indion * inp%POTIM, &
-                       SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
+        avgene(:,indion) = [REAL(tion, kind=q), &
+                            indion * inp%POTIM, &
+                            SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
       end do
 
       open(unit=27,                                   &
