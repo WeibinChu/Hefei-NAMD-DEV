@@ -5,7 +5,9 @@ Program main
   use hamil
   use fssh
   use dish
+#ifdef ENABLEMPI
   use mpi
+#endif
 
   implicit none
 

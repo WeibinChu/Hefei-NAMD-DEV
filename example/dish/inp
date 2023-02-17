@@ -1,0 +1,22 @@
+&NAMDPARA
+  BMIN       = 297
+  BMAX       = 305
+
+  NSAMPLE    = 1
+  NTRAJ      = 1000
+  NSW        = 999
+  NELM       = 10
+
+  TEMP       = 300
+  NAMDTIME   = 10000000
+  POTIM      = 1.0
+
+  ALGO       = "DISH"
+  ALGO_INT   = 0
+  LHOLE      = .TRUE.
+  LSHP       = .TRUE.
+  NPARDISH   = 1
+  LCPTXT     = .TRUE.
+
+  DEBUGLEVEL = "I"
+/

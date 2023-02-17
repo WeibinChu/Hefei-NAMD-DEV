@@ -1,10 +1,32 @@
 {
     "version": "2.0.0",
-    "command": "gfortran",
-    "args": [
-        "-g",
-        "${fileDirname}\\${fileBasenameNoExtension}.f90",
-        "-o",
-        "${fileDirname}\\${fileBasenameNoExtension}.exe"
-    ]
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "make",
+            "args": [],
+            "dependsOn": ["cp"]
+        },
+        {
+            "label": "clean1",
+            "type": "shell",
+            "command": "Remove-Item",
+            "args": ["*.mod"],
+            "dependsOn": "clean2"
+        },
+        {
+            "label": "clean2",
+            "type": "shell",
+            "command": "Remove-Item",
+            "args": ["*.o"],
+        },
+        {
+            "label": "cp",
+            "type": "shell",
+            "command": "cp",
+            "args": ["link/mpi.mod", "."],
+            "dependsOn": "clean1"
+        }
+    ],
 }

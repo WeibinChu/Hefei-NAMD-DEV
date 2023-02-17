@@ -1,0 +1,21 @@
+&NAMDPARA
+  BMIN       = 310
+  BMAX       = 324
+
+  NSAMPLE    = 100
+  NTRAJ      = 10000
+  NSW        = 1999
+  NELM       = 100
+
+  TEMP       = 300
+  NAMDTIME   = 1000
+  POTIM      = 1.0
+  
+  ALGO       = "FSSH"
+  ALGO_INT   = 0
+  LHOLE      = .TRUE.
+  LSHP       = .FALSE.
+  LCPTXT     = .TRUE.
+
+  DEBUGLEVEL = "I"
+/

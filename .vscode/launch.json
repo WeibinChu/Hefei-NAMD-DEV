@@ -5,14 +5,21 @@
             "name": "Fortran Launch (GDB)",
             "type": "cppdbg",
             "request": "launch",
-            "targetArchitecture": "x86",
-            "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
+            "program": "${workspaceFolder}\\hfnamd.exe",
             "miDebuggerPath": "gdb.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceFolder}",
+            // "envFile": "${workspaceFolder}/.env",
             "externalConsole": false,
-            "preLaunchTask": "gfortran"
+            "preLaunchTask": "build",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         },
         {
             "name": "Intel Debug Attach",
