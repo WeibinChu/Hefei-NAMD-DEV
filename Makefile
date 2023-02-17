@@ -1,8 +1,8 @@
 #-------------------------------------------------------------------------------
 # defaults
 #-------------------------------------------------------------------------------
-# FC       = ifort # -assume byterecl 
-FC       = mpiifort
+# FC       = ifort 
+FC       = mpiifort # -assume byterecl 
 # FC       = gfortran
 # FC       = x86_64-w64-mingw32-gfortran
 
@@ -35,10 +35,10 @@ EXE = hfnamd
 #-------------------------------------------------------------------------------
 .SUFFIXES: .o .f90
 .f90.o:
-	$(FC) $(FFLAGS) -c $< -DENABLEMPI
+	$(FC) $(FFLAGS) -c $<
 .SUFFIXES: .o .F90
 .F90.o:
-	$(FC) $(FFLAGS) -c $< -DENABLEMPI
+	$(FC) $(FFLAGS) -c $< -DENABLEMPI -DENABLEMKL
 
 #-------------------------------------------------------------------------------
 # Targets
