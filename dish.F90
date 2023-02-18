@@ -231,6 +231,7 @@ contains
     edt = inp%POTIM / inp%NELM
 
     do indion = 1, inp%NAMDTIME - 1
+      if (all(fgend)) exit
       ! NAMDTINI >= 2, tion+inp%NAMDTINI-1 <= NSW(FSSH), dump 1
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !          S                  E
@@ -268,6 +269,8 @@ contains
         ! TODO init conflict with OMP
         !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
         do i = 1, N
+          if (fgend(i)) cycle
+
           select case (inp%ALGO_INT)
           case (10)
             if (.NOT. init) then
@@ -291,6 +294,8 @@ contains
      
       !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
       do i = 1, N
+        if (fgend(i)) cycle
+
         ksi = ks_list(i)
         norm = REAL(SUM(CONJG(ksi%psi_c) * ksi%psi_c), kind=q) 
         if (norm <= 0.99_q .OR. norm >= 1.01_q)  then
@@ -307,7 +312,12 @@ contains
           call projector(ksi, COEFFISQ, which, tion, indion, cstat(i), iend, fgend(i), ks)
         end if
         
-        ks%dish_pops(cstat(i), indion+1) = ks%dish_pops(cstat(i), indion+1) + 3.0_q
+        if ( fgend(i) ) then
+          ! recomb completed
+          ks%dish_pops(cstat(i), indion+1:) = ks%dish_pops(cstat(i), indion+1:) + 3.0_q
+        else
+          ks%dish_pops(cstat(i), indion+1) = ks%dish_pops(cstat(i), indion+1) + 3.0_q
+        end if
 
         ks_list(i) = ksi
       end do
