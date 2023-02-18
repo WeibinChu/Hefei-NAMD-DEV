@@ -61,4 +61,6 @@ module constants
   ! dipole moment in atomic units to Debye
   real(q), parameter :: AUTDEBYE=2.541746
 
+  integer, parameter :: BLOCKSIZE = 1E7
+  
 end module constants

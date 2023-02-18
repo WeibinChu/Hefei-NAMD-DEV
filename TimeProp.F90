@@ -283,39 +283,4 @@ contains
   end function
 #endif
 
-  subroutine PropagationEle(ks, tion)
-    implicit none
-    type(TDKS), intent(inout)  :: ks
-    integer, intent(in) :: tion
-
-    integer :: tele
-    real(kind=q) :: edt, norm
-
-    edt = inp%POTIM / inp%NELM
-    
-    do tele = 1, inp%NELM
-      ! construct hamiltonian matrix
-      call make_hamil(tion, tele, ks)
-
-      call Trotter(ks, edt)
-    end do
-    norm = REAL(SUM(CONJG(ks%psi_c) * ks%psi_c), kind=q) 
-    if ( norm <= 0.99_q .OR. norm >= 1.01_q)  then
-        write(*,*) "[E] Error in Electronic Propagation"
-        stop
-    end if
-
-    if (inp%DEBUGLEVEL <= 0) write(*,'(A, f12.8)') 'NORM', norm
-
-    !ks%psi_a(:,tion) = ks%psi_c
-    !ks%pop_a(:,tion) = ks%pop_a(:,tion)/ks%norm(tion) 
-
-
-    !write(89,*) tion, conjg(ks%psi_c)*ks%psi_c
-    !write(89,*) 'sum', sum(conjg(ks%psi_c)*ks%psi_c)
-    ! ! end of the INNER loop
-    ! ! call cpu_time(fin)
-    ! ! write(*,*) "T_ion ", tion, fin - start
-  end subroutine
-
 end module

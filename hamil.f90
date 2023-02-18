@@ -27,7 +27,7 @@ module hamil
     complex(kind=q), allocatable, dimension(:,:) :: ham_c
 
     ! KS eigenvalues & Non-adiabatic couplings
-    real(kind=q), allocatable, dimension(:,:) :: eigKs
+    real(kind=q), allocatable, dimension(:,:) :: eigKs    !! These two are abandoned in the long version.
     real(kind=q), allocatable, dimension(:,:,:) :: NAcoup
 
     !! surface hopping related
@@ -45,11 +45,10 @@ module hamil
 
 contains
 
-  subroutine initTDKS(ks, olap)
+  subroutine initTDKS(ks)
     implicit none
 
     type(TDKS), intent(inout)  :: ks
-    type(overlap), intent(in)  :: olap
 
     integer :: N
 
@@ -65,8 +64,8 @@ contains
 
       allocate(ks%ham_c(N,N))
 
-      allocate(ks%eigKs(N, inp%NSW))
-      allocate(ks%NAcoup(N, N, inp%NSW))
+      ! allocate(ks%eigKs(N, inp%NSW))
+      ! allocate(ks%NAcoup(N, N, inp%NSW))
 
       select case (inp%ALGO)
       case ('FSSH')
@@ -89,8 +88,8 @@ contains
       end select
 
       ! Now copy olap%eig&Dij => ks%eig%Dij
-      ks%eigKs = olap%Eig
-      ks%NAcoup = olap%Dij
+      ! ks%eigKs = olap%Eig
+      ! ks%NAcoup = olap%Dij
 
       ks%LALLO = .TRUE.
     end if
@@ -114,11 +113,12 @@ contains
   end subroutine
 
   ! constructing the hamiltonian by replicating NAC
-  subroutine make_hamil(tion, tele, ks)
+  subroutine make_hamil(tion, tele, olap, ks)
     implicit none
 
-    type(TDKS), intent(inout) :: ks
     integer, intent(in) :: tion, tele
+    type(overlap), intent(in) :: olap
+    type(TDKS), intent(inout) :: ks
 
     integer :: RTIME,XTIME !! left & right
     integer :: i
@@ -128,10 +128,10 @@ contains
     ks%ham_c = (0.0_q, 0.0_q)
     if (tele <= (inp%NELM / 2)) then
       ks%ham_c(:,:) = interpolate((tele + inp%NELM/2.0_q - 0.5_q) / inp%NELM, &
-                                          ks%NAcoup(:,:,RTIME-1), ks%NAcoup(:,:,RTIME))
+                                          olap%Dij(:,:,RTIME-1), olap%Dij(:,:,RTIME))
     else 
       ks%ham_c(:,:) = interpolate((tele - inp%NELM/2.0_q - 0.5_q) / inp%NELM, &
-                                          ks%NAcoup(:,:,RTIME), ks%NAcoup(:,:,XTIME))
+                                          olap%Dij(:,:,RTIME), olap%Dij(:,:,XTIME))
     end if
 
     ! multiply by -i * hbar
@@ -140,16 +140,17 @@ contains
     ! the energy eigenvalue part
     do i=1, ks%ndim
       ks%ham_c(i,i) = interpolate((tele - 0.5_q) / inp%NELM, &
-                                  ks%eigKs(i,RTIME), ks%eigKs(i,XTIME))
+                                  olap%Eig(i,RTIME), olap%Eig(i,XTIME))
     end do
 
   end subroutine
 
-  subroutine make_hamil2(tion, tele, ks)
+  subroutine make_hamil2(tion, tele, olap, ks)
     implicit none
 
-    type(TDKS), intent(inout) :: ks
     integer, intent(in) :: tion, tele
+    type(overlap), intent(in) :: olap
+    type(TDKS), intent(inout) :: ks
 
     integer :: RTIME,XTIME !! left & right
     integer :: i
@@ -159,10 +160,10 @@ contains
     ks%ham_c = (0.0_q, 0.0_q)
     if (tele <= (inp%NELM / 2)) then
       ks%ham_c(:,:) = interpolate((tele + inp%NELM/2.0_q) / inp%NELM, &
-                                          ks%NAcoup(:,:,RTIME-1), ks%NAcoup(:,:,RTIME))
+                                          olap%Dij(:,:,RTIME-1), olap%Dij(:,:,RTIME))
     else 
       ks%ham_c(:,:) = interpolate((tele - inp%NELM/2.0_q) / inp%NELM, &
-                                          ks%NAcoup(:,:,RTIME), ks%NAcoup(:,:,XTIME))
+                                          olap%Dij(:,:,RTIME), olap%Dij(:,:,XTIME))
     end if
 
     ! multiply by -i * hbar
@@ -171,16 +172,17 @@ contains
     ! the energy eigenvalue part
     do i=1, ks%ndim
       ks%ham_c(i,i) = interpolate(REAL(tele, kind=q) / inp%NELM, &
-                                  ks%eigKs(i,RTIME), ks%eigKs(i,XTIME))
+                                  olap%Eig(i,RTIME), olap%Eig(i,XTIME))
     end do
 
   end subroutine
 
-  subroutine make_hamil_wrong(tion, tele, ks)
+  subroutine make_hamil_wrong(tion, tele, olap, ks)
     implicit none
 
-    type(TDKS), intent(inout) :: ks
     integer, intent(in) :: tion, tele
+    type(overlap), intent(in) :: olap
+    type(TDKS), intent(inout) :: ks
 
     integer :: RTIME,XTIME
     integer :: i
@@ -189,7 +191,7 @@ contains
 
     ks%ham_c = (0.0_q, 0.0_q)
     ks%ham_c(:,:) = interpolate(REAL(tele, kind=q) / inp%NELM, &
-                                ks%NAcoup(:,:,RTIME), ks%NAcoup(:,:,XTIME))
+                                olap%Dij(:,:,RTIME), olap%Dij(:,:,XTIME))
 
     ! multiply by -i * hbar
     ks%ham_c = -con%I * con%hbar * ks%ham_c 
@@ -197,8 +199,8 @@ contains
     ! the energy eigenvalue part
     do i=1, ks%ndim
       ks%ham_c(i,i) = interpolate(REAL(tele, kind=q) / inp%NELM, &
-                                  (ks%eigKs(i,RTIME)+ks%eigKs(i,XTIME))/2.0_q, &
-                                  (ks%eigKs(i,XTIME)+ks%eigKs(i,XTIME+1))/2.0_q)
+                                  (olap%Eig(i,RTIME)+olap%Eig(i,XTIME))/2.0_q, &
+                                  (olap%Eig(i,XTIME)+olap%Eig(i,XTIME+1))/2.0_q)
     end do
 
   end subroutine

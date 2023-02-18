@@ -72,9 +72,10 @@ contains
     end do
   end subroutine
 
-  subroutine projector(ks, COEFFISQ, which, tion, indion, cstat, iend, fgend, ks0)
+  subroutine projector(ks, COEFFISQ, which, tion, indion, cstat, iend, fgend, ks0, olap)
     implicit none
     type(TDKS), intent(inout) :: ks, ks0
+    type(overlap), intent(in) :: olap
     real(kind=q), dimension(ks%ndim), intent(inout) :: COEFFISQ !! |c_i(t)|^2
 
     integer, intent(in) :: which, tion, indion, iend
@@ -91,8 +92,8 @@ contains
     !! hopping probability with Boltzmann factor
     popBoltz = COEFFISQ
 
-    dE = ((ks0%eigKs(  :  ,tion) + ks0%eigKs(  :  , tion+1)) - &
-          (ks0%eigKs(cstat,tion) + ks0%eigKs(cstat, tion+1))) /2.0_q
+    dE = ((olap%Eig(  :  ,tion) + olap%Eig(  :  , tion+1)) - &
+          (olap%Eig(cstat,tion) + olap%Eig(cstat, tion+1))) /2.0_q
     if (inp%LHOLE) then
       dE = -dE
     end if
@@ -100,17 +101,6 @@ contains
       popBoltz = popBoltz * exp(-dE / kbT)
     end where
     popOnWhich = popBoltz(which)
-    ! popBoltz = COEFFISQ(which)
-
-    ! dE = ((ks0%eigKs(which,tion) + ks0%eigKs(which, tion+1)) - &
-    !       (ks0%eigKs(cstat,tion) + ks0%eigKs(cstat, tion+1))) /2.0_q
-    ! if (inp%LHOLE) then
-    !   dE = -dE
-    ! end if
-    ! if ( dE > 0.0_q ) then
-    !   popBoltz = popBoltz * exp(-dE / kbT)
-    ! end if
-    !write(*,*) which,popBoltz
 
     if (r <= popOnWhich) then
     !! project in, hop: cstat -> which
@@ -212,17 +202,17 @@ contains
     fgend = .FALSE.
     init  = .TRUE.
 
-    deallocate(ks%eigKs)
-    deallocate(ks%NAcoup)
+    ! deallocate(ks%eigKs)
+    ! deallocate(ks%NAcoup)
     deallocate(ks%dish_pops)
     deallocate(ks%recom_pops)
     ks_list = ks
-    allocate(ks%eigKs(ks%ndim, inp%NSW))
-    allocate(ks%NAcoup(ks%ndim, ks%ndim, inp%NSW))
+    ! allocate(ks%eigKs(ks%ndim, inp%NSW))
+    ! allocate(ks%NAcoup(ks%ndim, ks%ndim, inp%NSW))
     allocate(ks%dish_pops(ks%ndim, inp%NAMDTIME))
     if (inp%IPROG == 0) allocate(ks%recom_pops(ks%ndim,inp%NAMDTIME))
-    ks%eigKs = olap%Eig
-    ks%NAcoup = olap%Dij
+    ! ks%eigKs = olap%Eig
+    ! ks%NAcoup = olap%Dij
     ks%dish_pops = 0.0_q
     if (inp%IPROG == 0) ks%recom_pops = 0.0_q
 
@@ -246,22 +236,22 @@ contains
       do tele = 1, inp%NELM
         select case (inp%ALGO_INT)
         case (0)
-          call make_hamil(tion, tele, ks)
+          call make_hamil(tion, tele, olap, ks)
           call TrotterMat(ks, edt)
         case (11) ! this method will accumulate error! May renormalize wfc.
-          call make_hamil(tion, tele, ks)
+          call make_hamil(tion, tele, olap, ks)
           call EulerMat(ks, edt)
         case (10)
           if (init) then
             ks%psi_p = ks%psi_c
-            call make_hamil(tion, tele, ks)
+            call make_hamil(tion, tele, olap, ks)
             call EulerMat(ks, edt)
           else
-            call make_hamil2(tion, tele-1, ks)
+            call make_hamil2(tion, tele-1, olap, ks)
             call EulerModMat(ks, edt)
           end if
         case (2)
-          call make_hamil(tion, tele, ks)
+          call make_hamil(tion, tele, olap, ks)
           call DiagonizeMat(ks, edt)
         end select
         ham = ks%ham_c
@@ -309,7 +299,7 @@ contains
         call whichToDec(ksi, DECOTIME, which, shuffle)  
         
         if ( which > 0 ) then
-          call projector(ksi, COEFFISQ, which, tion, indion, cstat(i), iend, fgend(i), ks)
+          call projector(ksi, COEFFISQ, which, tion, indion, cstat(i), iend, fgend(i), ks, olap)
         end if
         
         if ( fgend(i) ) then
@@ -351,9 +341,10 @@ contains
   end subroutine
 
 
-  subroutine printDISH(ks)
+  subroutine printDISH(ks, olap)
     implicit none
     type(TDKS), intent(in) :: ks
+    type(overlap), intent(in) :: olap
 
     integer :: i, tion, indion, ierr
     character(len=48) :: buf
@@ -369,7 +360,7 @@ contains
         tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
         avgene(:,indion) = [REAL(tion, kind=q), &
                             indion * inp%POTIM, &
-                            SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
+                            SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion))]
       end do
 
       open(unit=27,                                   &
@@ -423,10 +414,10 @@ contains
     do indion=1, inp%NAMDTIME
       tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
 
-      write(unit=24,fmt=out_fmt) indion * inp%POTIM, SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)), &
+      write(unit=24,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion)), &
                             (ks%dish_pops(i,indion), i=1, ks%ndim)
 
-      write(unit=28,fmt=out_fmt) indion * inp%POTIM, SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)), &
+      write(unit=28,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion)), &
                             (ks%recom_pops(i,indion), i=1, ks%ndim)
     end do
 
@@ -487,7 +478,7 @@ contains
     do indion=1, inp%NAMDTIME
       tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2)
       write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
-                                  SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)) / inp%NACELE, &
+                                  ! SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)) / inp%NACELE, &
                                   (ks%dish_mppops(i,indion), i=1, inp%NBADNS)
     end do
 

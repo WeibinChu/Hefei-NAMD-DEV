@@ -53,7 +53,7 @@ Program main
 
     ! initiate KS matrix
     call system_clock(t1)
-    call initTDKS(ks, olap)
+    call initTDKS(ks)
     call system_clock(t2)
     if (iprog == 0) write(*,'(A, T31, F11.3)') "CPU Time in initTDKS [s]:", MOD(t2-t1, cm) / REAL(cr)
 
@@ -63,23 +63,23 @@ Program main
       if (iprog == 0) then
         ! Time propagation
         t1 = t2
-        call runSE(ks)
+        call runSE(ks, olap)
         call system_clock(t2)
         write(*,'(A, T31, F11.3)') "CPU Time in runSE [s]:", MOD(t2-t1, cm) / REAL(cr)
 
         t1 = t2
-        call printSE(ks)
+        call printSE(ks, olap)
         call system_clock(t2)
         write(*,'(A, T31, F11.3)') "CPU Time in printSE [s]:", MOD(t2-t1, cm) / REAL(cr)
         ! Run surface hopping
         if (inp%LSHP) then
           t1 = t2
-          call runSH(ks)
+          call runSH(ks, olap)
           call system_clock(t2)
           write(*,'(A, T31, F11.3)') "CPU Time in runSH [s]:", MOD(t2-t1, cm) / REAL(cr)
 
           t1 = t2
-          call printSH(ks)
+          call printSH(ks, olap)
           call system_clock(t2)
           write(*,'(A, T31, F11.3)') "CPU Time in printSH [s]:", MOD(t2-t1, cm) / REAL(cr)
         end if
@@ -98,7 +98,7 @@ Program main
         write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
 
         t1 = t2
-        call printDISH(ks)
+        call printDISH(ks, olap)
         call system_clock(t2)
         write(*,'(A, T31, F11.3)') "CPU Time in printDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
 
