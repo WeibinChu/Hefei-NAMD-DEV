@@ -35,7 +35,7 @@ module hamil
     real(kind=q), allocatable, dimension(:,:,:) :: sh_prob !! P_ij (j,i,N-1)
 
     !! decoherence induced surface hopping
-    real(kind=q), allocatable, dimension(:,:) :: dish_pops, dish_mppops
+    real(kind=q), allocatable, dimension(:,:) :: dish_pops, dish_mppops !! dish_mppops & recom_pops are not used.
     real(kind=q), allocatable, dimension(:,:) :: recom_pops
     real(kind=q), allocatable, dimension(:)   :: dish_decmoment !! t_i(t)
     ! whether the memory has been allocated
@@ -79,11 +79,6 @@ contains
         end if
       case ('DISH')
         allocate(ks%dish_decmoment(N))
-        allocate(ks%dish_pops(1,1))  ! this is only for formatting, 
-        allocate(ks%recom_pops(1,1)) ! will be reallocated.
-        if (inp%LSPACE) then
-          allocate(ks%dish_mppops(inp%NBADNS, inp%NAMDTIME))
-        end if
       case default
       end select
 
@@ -107,7 +102,6 @@ contains
       ks%sh_pops = 0.0_q
       ks%sh_prob = 0.0_q
     case ('DISH')
-      ks%dish_decmoment = 0.0_q
     end select
 
   end subroutine

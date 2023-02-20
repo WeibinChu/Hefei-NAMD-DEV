@@ -86,6 +86,7 @@ Program main
         if (inp%LSPACE) then
           t1 = t2
           call printMPFSSH(ks)
+          call system_clock(t2)
           write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
         end if
       end if
@@ -94,20 +95,7 @@ Program main
       t1 = t2
       call runDISH(ks, olap)
       call system_clock(t2)
-      if (iprog == 0) then
-        write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
-
-        t1 = t2
-        call printDISH(ks, olap)
-        call system_clock(t2)
-        write(*,'(A, T31, F11.3)') "CPU Time in printDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
-
-        if (inp%LSPACE) then
-          t1 = t2
-          call printMPDISH(ks)
-          write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
-        end if
-      end if
+      if (iprog == 0) write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
     end select
   end do
   call system_clock(ttot2)
