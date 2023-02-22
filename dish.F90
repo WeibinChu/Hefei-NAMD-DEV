@@ -3,6 +3,7 @@ module dish
   use constants
   use fileio
   use utils
+  use parallel
   use couplings
   use hamil
   use TimeProp
@@ -109,7 +110,7 @@ contains
       ks%psi_c(which) = con%uno
 
       if ((.NOT. fgend) .AND. which == iend) then
-        ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q/inp%NTRAJ
+        ks0%dish_pops(cstat, (indion+1):) = ks0%dish_pops(cstat, (indion+1):) + 1.0_q/inp%NTRAJ
         fgend = .TRUE.
       end if
 
@@ -145,7 +146,7 @@ contains
         if (lower <= r .AND. r < upper) then
           if ((.NOT. fgend) .AND. i == iend) then
             ! Here use decimal part of dish_pops to store the recom_pops matrix.
-            ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q/inp%NTRAJ
+            ks0%dish_pops(cstat, (indion+1):) = ks0%dish_pops(cstat, (indion+1):) + 1.0_q/inp%NTRAJ
             fgend = .TRUE.
           end if
           cstat = i !! Hop to i
@@ -177,8 +178,9 @@ contains
     integer, dimension(ks%ndim)                :: shuffle
     real(kind=q), dimension(ks%ndim)           :: COEFFISQ  !! |c_i(t)|^2
     real(kind=q), dimension(ks%ndim)           :: DECOTIME  !! tau_i(t)
+    real(kind=q), dimension(ks%ndim)           :: tmp_pops
 
-    integer :: lbd, ubd
+    integer :: lbd, ubd, uboundry
     integer :: lower, upper
     integer :: ierr
 
@@ -190,10 +192,11 @@ contains
     !        4  A...B..A...B..C....
     !        5  A...B..A...B..C....
 #ifdef ENABLEMPI
-    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+    call MPI_BARRIER(inp%COMMUNICATOR, ierr)
 #endif
 
-    N = ceiling(REAL(inp%NTRAJ)/inp%NPROG)
+    ! N = ceiling(REAL(inp%NTRAJ)/inp%NPROG)
+    call divideTasks(inp%IPROG, inp%NPROG, inp%NTRAJ, lower, upper, N)
     allocate(ks_list(N))
     allocate(fgend(N))
     allocate(cstat(N))
@@ -206,7 +209,9 @@ contains
     init  = .TRUE.
     lbd   = 2
     ubd   = 1 ! For short verion, ubd <=> indion
+    uboundry = MAXSIZE
 
+    deallocate(ks%dish_pops)
     ks_list = ks
     allocate(ks%dish_pops(ks%ndim, MIN(MAXSIZE, inp%NAMDTIME)))
     ks%dish_pops = 0.0_q
@@ -225,116 +230,128 @@ contains
 
     !! The loop start here. !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do indion = 1, inp%NAMDTIME - 1
-      if (all(fgend)) exit
-      ! NAMDTINI >= 2, tion+inp%NAMDTINI-1 <= NSW(FSSH), dump 1
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      !          S                  E
-      ! E1--D1--E2--D2--E3--D3------EN--DN--XX
-      !                         E1--D1--E2--D2--E3--D3------EN--DN--XX
-      !                              S                      E
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      if (.NOT. all(fgend)) then
+        ! NAMDTINI >= 2, tion+inp%NAMDTINI-1 <= NSW(FSSH), dump 1
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !          S                  E
+        ! E1--D1--E2--D2--E3--D3------EN--DN--XX
+        !                         E1--D1--E2--D2--E3--D3------EN--DN--XX
+        !                              S                      E
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-      ! for DISH, one cycle has NSW-2 intervals.
-      tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2) ! 2 <= tion <= 2+(NSW-3) = NSW-1
+        ! for DISH, one cycle has NSW-2 intervals.
+        tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2) ! 2 <= tion <= 2+(NSW-3) = NSW-1
 
-      do tele = 1, inp%NELM
-        select case (inp%ALGO_INT)
-        case (0)
-          call make_hamil(tion, tele, olap, ks)
-          call TrotterMat(ks, edt)
-        case (11) ! this method will accumulate error! May renormalize wfc.
-          call make_hamil(tion, tele, olap, ks)
-          call EulerMat(ks, edt)
-        case (10)
-          if (init) then
-            ks%psi_p = ks%psi_c
+        do tele = 1, inp%NELM
+          select case (inp%ALGO_INT)
+          case (0)
+            call make_hamil(tion, tele, olap, ks)
+            call TrotterMat(ks, edt)
+          case (11) ! this method will accumulate error! May renormalize wfc.
             call make_hamil(tion, tele, olap, ks)
             call EulerMat(ks, edt)
-          else
-            call make_hamil2(tion, tele-1, olap, ks)
-            call EulerModMat(ks, edt)
-          end if
-        case (2)
-          call make_hamil(tion, tele, olap, ks)
-          call DiagonizeMat(ks, edt)
-        end select
-        ham = ks%ham_c
+          case (10)
+            if (init) then
+              ks%psi_p = ks%psi_c
+              call make_hamil(tion, tele, olap, ks)
+              call EulerMat(ks, edt)
+            else
+              call make_hamil2(tion, tele-1, olap, ks)
+              call EulerModMat(ks, edt)
+            end if
+          case (2)
+            call make_hamil(tion, tele, olap, ks)
+            call DiagonizeMat(ks, edt)
+          end select
+          ham = ks%ham_c
 
-        ! TODO init conflict with OMP
-        !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
+          ! TODO init conflict with OMP
+          !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
+          do i = 1, N
+            if (fgend(i)) cycle
+
+            select case (inp%ALGO_INT)
+            case (10)
+              if (.NOT. init) then
+                ksi = ks_list(i)
+                ksi%psi_n = ksi%psi_p + HamPsi(ham, ksi%psi_p, 'T')
+                ksi%psi_p = ksi%psi_c
+                ksi%psi_c = ksi%psi_n
+                ks_list(i) = ksi
+              else
+                ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
+                init = .FALSE.
+              end if
+            case (11)
+              ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
+            case default
+              ks_list(i)%psi_c = HamPsi(ham, ks_list(i)%psi_c, 'N')
+            end select
+          end do
+          !!$OMP END PARALLEL DO
+        end do
+      
+        !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
         do i = 1, N
           if (fgend(i)) cycle
 
-          select case (inp%ALGO_INT)
-          case (10)
-            if (.NOT. init) then
-              ksi = ks_list(i)
-              ksi%psi_n = ksi%psi_p + HamPsi(ham, ksi%psi_p, 'T')
-              ksi%psi_p = ksi%psi_c
-              ksi%psi_c = ksi%psi_n
-              ks_list(i) = ksi
-            else
-              ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
-              init = .FALSE.
-            end if
-          case (11)
-            ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
-          case default
-            ks_list(i)%psi_c = HamPsi(ham, ks_list(i)%psi_c, 'N')
-          end select
+          ksi = ks_list(i)
+          norm = REAL(SUM(CONJG(ksi%psi_c) * ksi%psi_c), kind=q) 
+          if (norm <= 0.99_q .OR. norm >= 1.01_q)  then
+              write(*,*) "[E] Error in Electronic Propagation"
+              stop
+          end if
+
+          call calcDect(ksi, DECOTIME, COEFFISQ)   
+
+          ksi%dish_decmoment(:) = ksi%dish_decmoment(:) + inp%POTIM
+          call whichToDec(ksi, DECOTIME, which, shuffle)  
+          
+          if ( which > 0 ) then
+            call projector(ksi, COEFFISQ, which, tion, ubd, cstat(i), iend, fgend(i), ks, olap)
+          end if
+          
+          if ( fgend(i) ) then
+            ! recomb completed
+            ks%dish_pops(cstat(i), ubd+1:) = ks%dish_pops(cstat(i), ubd+1:) + 3.0_q
+          else
+            ks%dish_pops(cstat(i), ubd+1) = ks%dish_pops(cstat(i), ubd+1) + 3.0_q
+          end if
+
+          ks_list(i) = ksi
         end do
         !!$OMP END PARALLEL DO
-      end do
-     
-      !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
-      do i = 1, N
-        if (fgend(i)) cycle
-
-        ksi = ks_list(i)
-        norm = REAL(SUM(CONJG(ksi%psi_c) * ksi%psi_c), kind=q) 
-        if (norm <= 0.99_q .OR. norm >= 1.01_q)  then
-            write(*,*) "[E] Error in Electronic Propagation"
-            stop
-        end if
-
-        call calcDect(ksi, DECOTIME, COEFFISQ)   
-
-        ksi%dish_decmoment(:) = ksi%dish_decmoment(:) + inp%POTIM
-        call whichToDec(ksi, DECOTIME, which, shuffle)  
-        
-        if ( which > 0 ) then
-          call projector(ksi, COEFFISQ, which, tion, ubd, cstat(i), iend, fgend(i), ks, olap)
-        end if
-        
-        if ( fgend(i) ) then
-          ! recomb completed
-          ks%dish_pops(cstat(i), ubd+1:) = ks%dish_pops(cstat(i), ubd+1:) + 3.0_q
-        else
-          ks%dish_pops(cstat(i), ubd+1) = ks%dish_pops(cstat(i), ubd+1) + 3.0_q
-        end if
-
-        ks_list(i) = ksi
-      end do
-      !!$OMP END PARALLEL DO
+      end if
 
       ubd = ubd + 1
-      if (ubd == MAXSIZE) then
+      if (ubd == uboundry) then
 #ifdef ENABLEMPI
         if (inp%NPROG > 1) then
-          call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, ks%ndim*MAXSIZE, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+          call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, ks%ndim*MAXSIZE, MPI_REAL8, MPI_SUM, 0, inp%COMMUNICATOR, ierr)
         end if
-        call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+        call MPI_BARRIER(inp%COMMUNICATOR, ierr)
 #endif
+        tmp_pops = MOD(ks%dish_pops(:,ubd), 1.0_q)
         if (inp%IPROG == 0) then
           call printDISH(ks, olap, lbd, ubd, step=1)
           if (inp%LSPACE) call printMPDISH(ks, lbd, ubd, step=1)
         end if
         ! refresh
-        lbd = 2
-        ubd = 1
+        lbd = ubd + 1
+        ubd = ubd
+        uboundry = ubd+MAXSIZE-1
+        ! recom: keep accumulating. Copy from the last of the old list.
+        ! pops:  keep changing, except those have recombined. 
+        !        The first of the new list is wrong, but useless.
+        deallocate(ks%dish_pops)
+        allocate(ks%dish_pops(ks%ndim, ubd:ubd+MAXSIZE-1))
         ks%dish_pops = 0.0_q
-        ks%dish_pops(iend,:) = ks%dish_pops(iend,:) + 3.0_q * COUNT(fgend)
-        ks%dish_pops(iend,:) = ks%dish_pops(iend,:) + 1.0_q/inp%NTRAJ * COUNT(fgend)
+        ks%dish_pops(iend,:) = 3.0_q * COUNT(fgend)
+        if (inp%IPROG == 0) then
+          do i = ubd, ubd+MAXSIZE-1
+            ks%dish_pops(:,i) = ks%dish_pops(:,i) + tmp_pops
+          end do
+        end if
         call setOlapBoundry(olap, tion+1)
       end if
     end do
@@ -345,9 +362,9 @@ contains
     ! Buffer parameters inbuf and inoutbuf must not be aliased
     ! use +0 bypass it.
     if (inp%NPROG > 1) then
-      call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, ks%ndim*inp%NAMDTIME, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+      call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, size(ks%dish_pops), MPI_REAL8, MPI_SUM, 0, inp%COMMUNICATOR, ierr)
     end if
-    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+    call MPI_BARRIER(inp%COMMUNICATOR, ierr)
 #endif
 
     if (inp%IPROG == 0) then
@@ -426,7 +443,7 @@ contains
                             (ks%dish_pops(i,indion), i=1, ks%ndim)
 
       write(unit=28,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion)), &
-                            (ks%recom_pops(i,indion), i=1, ks%ndim)
+                            (0.0_q, i=1, ks%ndim)
 
       return
     end if

@@ -18,14 +18,14 @@ BLAS     = libblas.dll.a
 LAPACK   = liblapack.dll.a
 MPI      = libmsmpi.a
 LLIBS    = $(BLAS) $(LAPACK) $(MPI)
-DMPI     = # -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI 
+DMPI     = -D "INT_PTR_KIND()=8" -fno-range-check -DENABLEMPI 
 DMKL     = -DENABLEMKL
 
 #-------------------------------------------------------------------------------
 # Src
 #-------------------------------------------------------------------------------
 
-SRC = prec.f90 utils.f90 fileio.f90 couplings.f90 hamil.f90 \
+SRC = prec.f90 utils.f90 parallel.f90 fileio.f90 couplings.f90 hamil.f90 \
    	TimeProp.f90 dish.f90 fssh.f90 main.f90
 
 

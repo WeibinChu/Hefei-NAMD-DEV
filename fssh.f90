@@ -178,9 +178,6 @@ module fssh
 
     istat = inp%INIBAND
 
-    ! initialize the random seed for ramdom number production
-    call init_random_seed()
-
     do i=1, inp%NTRAJ
       ! in the first step, current step always equal initial step
       cstat = istat

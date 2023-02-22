@@ -6,8 +6,11 @@ module fileio
 
   type, private :: namdInfo
     logical, private :: isCreated = .false.
-    integer :: NPROG
-    integer :: IPROG
+    integer :: NPROG !! TRAJPAR
+    integer :: IPROG !! MPI prog index in one group, start from 0
+    integer :: NPAR
+    integer :: COLOR
+    integer :: COMMUNICATOR
 
     integer :: BMIN
     integer :: BMAX
@@ -52,7 +55,7 @@ module fileio
   contains
     procedure :: getInstance
     procedure :: getUserInp, printUserInp
-    procedure :: setIni, setHLORB
+    procedure :: setIni, setHLORB, setMPI
     procedure, private :: checkUserInp
   end type
 
@@ -83,13 +86,26 @@ contains
       this%LORB = lorb
     end subroutine
 
-    subroutine getUserInp(this, nprog, iprog)
+    subroutine setMPI(this, iprog, nprog, color, communicator)
+      implicit none
+      class(namdInfo), intent(inout) :: this
+      integer, intent(in) :: iprog, nprog, color, communicator
+
+      this%IPROG = iprog
+      this%NPROG = nprog
+      this%COLOR = color
+      this%COMMUNICATOR = communicator
+    end subroutine
+
+    subroutine getUserInp(this, nprog)
       implicit none
 
       class(namdInfo), intent(inout) :: this
-      integer, intent(in) :: nprog, iprog
+      integer, intent(in) :: nprog
 
       ! local variables with the same name as those in "inp"
+      integer :: npar      = 1
+
       integer :: bmin
       integer :: bmax
 
@@ -113,7 +129,6 @@ contains
       logical :: lcptxt         = .TRUE.
       logical :: lspace         = .FALSE.
       logical :: lbinout        = .FALSE.
-      integer :: npardish       = 1
       ! running directories
       character(len=256) :: rundir = 'run'
       character(len=256) :: tbinit = 'INICON'
@@ -127,7 +142,7 @@ contains
                           temp, namdtime, potim,               &
                           lhole, lshp, algo, algo_int, lcptxt, &
                           lspace, nacbasis, nacele,            &
-                          npardish, lbinout,                   &
+                          npar, lbinout,                   &
                           rundir, tbinit, diinit, spinit,      &
                           debuglevel
 
@@ -222,15 +237,14 @@ contains
       end if
 
       ! assign the parameters
-      this%NPROG    = nprog
-      this%IPROG    = iprog
+      this%NPAR     = MIN(npar, nprog, nsample)
 
       this%BMIN     = bmin
       this%BMAX     = bmax
       this%NBADNS   = bmax - bmin + 1
 
       this%NSW      = nsw
-      this%NTRAJ    = ceiling(REAL(ntraj)/nprog)*nprog
+      this%NTRAJ    = ntraj
       this%NELM     = nelm
       this%NSAMPLE  = nsample
 
@@ -243,7 +257,6 @@ contains
       this%LCPTXT   = lcptxt
       this%ALGO     = algo
       this%ALGO_INT = algo_int
-      this%NPARDISH = nthread
       this%LBINOUT  = lbinout
 
       this%RUNDIR   = trim(rundir)
@@ -287,35 +300,40 @@ contains
     subroutine printUserInp(this)
       implicit none
       class(namdInfo), intent(in) :: this
+      character(len=4096) :: buf
 
-      write(*,'(A)') "------------------------------------------------------------"
-      write(*,'(A30,A3,I8)') 'BMIN',     ' = ', this%BMIN
-      write(*,'(A30,A3,I8)') 'BMAX',     ' = ', this%BMAX
-      write(*,'(A30,A3,I8)') 'INIBAND',  ' = ', this%INIBAND
-      write(*,'(A)') ""
-      write(*,'(A30,A3,F8.1)') 'POTIM',  ' = ', this%POTIM
-      write(*,'(A30,A3,F8.1)') 'TEMP',   ' = ', this%TEMP
-      write(*,'(A30,A3,I8)') 'NAMDTINI', ' = ', this%NAMDTINI
-      write(*,'(A30,A3,I8)') 'NAMDTIME', ' = ', this%NAMDTIME
-      write(*,'(A)') ""
-      write(*,'(A30,A3,I8)') 'NSW',      ' = ', this%NSW
-      write(*,'(A30,A3,I8)') 'NTRAJ',    ' = ', this%NTRAJ
-      write(*,'(A30,A3,I8)') 'NELM',     ' = ', this%NELM
-      write(*,'(A)') ""
-      write(*,'(A30,A3,L8)') 'LHOLE',    ' = ', this%LHOLE
-      write(*,'(A30,A3,L8)') 'LSHP',     ' = ', this%LSHP
-      write(*,'(A30,A3,A8)') 'ALGO',     ' = ', TRIM(ADJUSTL(this%ALGO))
-      write(*,'(A30,A3,I8)') 'ALGO_INT', ' = ', this%ALGO_INT
-      if (this%ALGO == 'DISH') write(*,'(A30,A3,I8)') 'NPARDISH', ' = ', this%NPROG
-      write(*,'(A30,A3,L8)') 'LBINOUT',  ' = ', this%LBINOUT
-      write(*,'(A30,A3,L8)') 'LCPTXT',   ' = ', this%LCPTXT
-      write(*,'(A)') ""
-      write(*,'(A30,A3,L8)') 'LSPACE',   ' = ', this%LSPACE
+      write(buf,'(A60,A)') "------------------------------------------------------------", new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'NPAR',     ' = ', this%NPAR,             new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'TRAJPAR',  ' = ', this%NPROG,            new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'MPIGROUP', ' = ', this%COLOR,            new_line('')
+      write(buf,'(A,A)')              trim(buf),                                           new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'BMIN',     ' = ', this%BMIN,             new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'BMAX',     ' = ', this%BMAX,             new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'INIBAND',  ' = ', this%INIBAND,          new_line('')
+      write(buf,'(A,A)')              trim(buf),                                           new_line('')
+      write(buf,'(A,A30,A3,F10.1,A)') trim(buf), 'POTIM',    ' = ', this%POTIM,            new_line('')
+      write(buf,'(A,A30,A3,F10.1,A)') trim(buf), 'TEMP',     ' = ', this%TEMP,             new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'NAMDTINI', ' = ', this%NAMDTINI,         new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'NAMDTIME', ' = ', this%NAMDTIME,         new_line('')
+      write(buf,'(A,A)')              trim(buf) ,                                          new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'NSW',      ' = ', this%NSW,              new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'NTRAJ',    ' = ', this%NTRAJ,            new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'NELM',     ' = ', this%NELM,             new_line('')
+      write(buf,'(A,A)')              trim(buf),                                           new_line('')
+      write(buf,'(A,A30,A3,L10,A)')   trim(buf), 'LHOLE',    ' = ', this%LHOLE,            new_line('')
+      write(buf,'(A,A30,A3,L10,A)')   trim(buf), 'LSHP',     ' = ', this%LSHP,             new_line('')
+      write(buf,'(A,A30,A3,A10,A)')   trim(buf), 'ALGO',     ' = ', TRIM(this%ALGO),       new_line('')
+      write(buf,'(A,A30,A3,I10,A)')   trim(buf), 'ALGO_INT', ' = ', this%ALGO_INT,         new_line('')
+      write(buf,'(A,A30,A3,L10,A)')   trim(buf), 'LBINOUT',  ' = ', this%LBINOUT,          new_line('')
+      write(buf,'(A,A30,A3,L10,A)')   trim(buf), 'LCPTXT',   ' = ', this%LCPTXT,           new_line('')
+      write(buf,'(A,A)')              trim(buf),                                           new_line('')
+      write(buf,'(A,A30,A3,L10,A)')   trim(buf), 'LSPACE',   ' = ', this%LSPACE,           new_line('')
       if (this%LSPACE) then
-        write(*,'(A30,A3,I8)')'NACBASIS',' = ', this%NACBASIS
-        write(*,'(A30,A3,I8)')'NACELE',  ' = ', this%NACELE
+        write(buf,'(A,A30,A3,I10,A)') trim(buf), 'NACBASIS', ' = ', this%NACBASIS,         new_line('')
+        write(buf,'(A,A30,A3,I10,A)') trim(buf), 'NACELE',   ' = ', this%NACELE,           new_line('')
       end if
-      write(*,'(A)') "------------------------------------------------------------"
+      write(buf,'(A,A60)') trim(buf), "------------------------------------------------------------"
+      write(*,'(A)') trim(buf)
     end subroutine
 
 end module

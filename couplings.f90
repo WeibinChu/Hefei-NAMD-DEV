@@ -301,7 +301,7 @@ contains
       stop
     end if
 
-    ! start from 1?
+    ! start from 1.
     read(unit=42, iostat=ierr, pos=1+kind(0.0_q)*olap%NBANDS*(olap%LBD-1)) olap%Eig
     read(unit=43, iostat=ierr, pos=1+kind(0.0_q)*olap%NBANDS*olap%NBANDS*(olap%LBD-1)) olap%Dij
 

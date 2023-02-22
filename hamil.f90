@@ -79,6 +79,7 @@ contains
         end if
       case ('DISH')
         allocate(ks%dish_decmoment(N))
+        allocate(ks%dish_pops(1,1))
       case default
       end select
 
