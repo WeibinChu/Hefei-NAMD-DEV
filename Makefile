@@ -2,7 +2,7 @@
 # defaults
 #-------------------------------------------------------------------------------
 # FC       = ifort 
-FC       = mpiifort # -assume byterecl 
+FC       = mpiifort -assume byterecl 
 # FC       = gfortran
 # FC       = x86_64-w64-mingw32-gfortran
 
@@ -23,7 +23,7 @@ LLIBS    = $(BLAS) $(LAPACK)
 # Src
 #-------------------------------------------------------------------------------
 
-SRC = prec.f90 utils.f90 fileio.f90 couplings.f90 hamil.f90 \
+SRC = prec.f90 utils.f90 parallel.f90 fileio.f90 couplings.f90 hamil.f90 \
    	TimeProp.f90 dish.f90 fssh.f90 main.f90
 
 

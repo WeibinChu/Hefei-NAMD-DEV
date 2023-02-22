@@ -1,6 +1,8 @@
 Program main
   use prec
   use fileio
+  use utils
+  use parallel
   use couplings
   use hamil
   use fssh
@@ -16,9 +18,18 @@ Program main
 
   integer :: ns, cr, cm, t1, t2, ttot1, ttot2
   integer :: nprog = 1, iprog = 0, ierr
+  integer :: communicator = 0, color = 0
+  integer :: lower, upper, ncount
+  real(kind=qs) :: tottime
+  character(len=256) :: buf
 
 #ifdef ENABLEMPI
   call MPI_INIT(ierr)
+  if (ierr /= 0) then
+    write(*,*) "[E] MPI initialization failed. Aborting..."
+    call MPI_FINALIZE(ierr)
+    stop
+  end if
   call MPI_COMM_SIZE(MPI_COMM_WORLD, nprog, ierr)
   call MPI_COMM_RANK(MPI_COMM_WORLD, iprog, ierr)
 #endif
@@ -27,11 +38,23 @@ Program main
   call system_clock(count_max=cm)
   
   if (iprog == 0) call printWelcome()
+  ! initialize the random seed for ramdom number production
+  call init_random_seed(salt=iprog)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! First, get user inputs
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   call inp%getInstance()
-  call inp%getUserInp(nprog, iprog)
+  call inp%getUserInp(nprog)
+
+#ifdef ENABLEMPI
+  ! MPI_COMM_SPLIT(COMM, COLOR, KEY, NEWCOMM, IERROR)
+  color = MODULO(iprog, inp%NPAR)
+  call MPI_COMM_SPLIT(MPI_COMM_WORLD, color, iprog, communicator, ierr)
+  call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+  call MPI_COMM_SIZE(communicator, nprog, ierr)
+  call MPI_COMM_RANK(communicator, iprog, ierr)
+#endif
+  call inp%setMPI(iprog, nprog, color, communicator)
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Secondly, get couplings
@@ -47,15 +70,22 @@ Program main
   call TDCoupIJ(olap, olap_sp)
   call system_clock(ttot1)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  do ns=1, inp%NSAMPLE
+  ! distribute tasks.
+  call divideTasks(color, inp%NPAR, inp%NSAMPLE, lower, upper, ncount)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  do ns=lower, upper
     call inp%setIni(ns)
     if (iprog == 0) call inp%printUserInp()
 
     ! initiate KS matrix
     call system_clock(t1)
-    call initTDKS(ks, olap)
+    call initTDKS(ks)
     call system_clock(t2)
-    if (iprog == 0) write(*,'(A, T31, F11.3)') "CPU Time in initTDKS [s]:", MOD(t2-t1, cm) / REAL(cr)
+    if (iprog == 0) then
+      write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in initTDKS [s]:", &
+                                              MODULO(t2-t1, cm) / REAL(cr)
+      write(*,*) trim(buf)
+    end if
 
     select case(inp%ALGO)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -63,30 +93,41 @@ Program main
       if (iprog == 0) then
         ! Time propagation
         t1 = t2
-        call runSE(ks)
+        call runSE(ks, olap)
         call system_clock(t2)
-        write(*,'(A, T31, F11.3)') "CPU Time in runSE [s]:", MOD(t2-t1, cm) / REAL(cr)
+        write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in runSE [s]:", &
+                                                MODULO(t2-t1, cm) / REAL(cr)
+        write(*,*) trim(buf)
 
         t1 = t2
-        call printSE(ks)
+        call printSE(ks, olap)
         call system_clock(t2)
-        write(*,'(A, T31, F11.3)') "CPU Time in printSE [s]:", MOD(t2-t1, cm) / REAL(cr)
+        write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in printSE [s]:", &
+                                                MODULO(t2-t1, cm) / REAL(cr)
+        write(*,*) trim(buf)
         ! Run surface hopping
         if (inp%LSHP) then
           t1 = t2
-          call runSH(ks)
+          call runSH(ks, olap)
           call system_clock(t2)
-          write(*,'(A, T31, F11.3)') "CPU Time in runSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+          write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in runSH [s]:", &
+                                                  MODULO(t2-t1, cm) / REAL(cr)
+          write(*,*) trim(buf)
 
           t1 = t2
-          call printSH(ks)
+          call printSH(ks, olap)
           call system_clock(t2)
-          write(*,'(A, T31, F11.3)') "CPU Time in printSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+          write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in printSH [s]:", &
+                                                  MODULO(t2-t1, cm) / REAL(cr)
+          write(*,*) trim(buf)
         end if
         if (inp%LSPACE) then
           t1 = t2
           call printMPFSSH(ks)
-          write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
+          call system_clock(t2)
+          write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in printMPFSSH [s]:", &
+                                                  MODULO(t2-t1, cm) / REAL(cr)
+          write(*,*) trim(buf)
         end if
       end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -95,26 +136,28 @@ Program main
       call runDISH(ks, olap)
       call system_clock(t2)
       if (iprog == 0) then
-        write(*,'(A, T31, F11.3)') "CPU Time in runDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
-
-        t1 = t2
-        call printDISH(ks)
-        call system_clock(t2)
-        write(*,'(A, T31, F11.3)') "CPU Time in printDISH [s]:", MOD(t2-t1, cm) / REAL(cr)
-
-        if (inp%LSPACE) then
-          t1 = t2
-          call printMPDISH(ks)
-          write(*,'(A, T31, F11.3)') "CPU Time in printMPFSSH [s]:", MOD(t2-t1, cm) / REAL(cr)
-        end if
+        write(buf,'(A3,I3,A5,I4,A,T48,F11.3)') "MPI", color, " TINI", inp%NAMDTINI, ": CPU Time in runDISH [s]:", &
+                                                MODULO(t2-t1, cm) / REAL(cr)
+        write(*,*) trim(buf)
       end if
     end select
   end do
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   call system_clock(ttot2)
-  if (iprog == 0) write(*,'(A)') "------------------------------------------------------------"
-  if (iprog == 0) write(*,'(A, T31, F11.3)') "All Time Elapsed [s]:", MOD(ttot2-ttot1, cm) / REAL(cr)
+  tottime = MODULO(ttot2-ttot1, cm) / REAL(cr)
+#ifdef ENABLEMPI
+  call MPI_REDUCE(tottime+0.0, tottime, 1, MPI_REAL, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+#endif
+  
+  if (iprog == 0 .AND. color == 0) then
+    write(*,'(A)') "------------------------------------------------------------"
+    write(buf,'(A,T48,F11.3)') "All Time Elapsed [s]:", tottime
+    write(*,*) trim(buf)
+  end if
 
 #ifdef ENABLEMPI
+  call MPI_COMM_FREE(communicator, ierr)
   call MPI_FINALIZE(ierr)
 #endif
 
@@ -149,7 +192,7 @@ contains
     write(*,'(A)') "|     TEMP, NAMDTIME, POTIM,                                                     |"
     write(*,'(A)') "|     LHOLE, LSHP, ALGO, ALGO_INT, LCPTXT,                                       |"
     write(*,'(A)') "|     LSPACE, NACBASIS, NACELE,                                                  |"
-    write(*,'(A)') "|     NPARDISH, LBINOUT,                                                         |"
+    write(*,'(A)') "|     NPAR, LBINOUT,                                                             |"
     write(*,'(A)') "|     RUNDIR, TBINIT, DIINIT, SPINIT,                                            |"
     write(*,'(A)') "|     DEBUGLEVEL                                                                 |"
     write(*,'(A)') "| Supported input files:                                                         |"

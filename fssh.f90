@@ -43,10 +43,11 @@ module fssh
 
   end subroutine
 
-  subroutine calcProb(tion, indion, tele, ks)
+  subroutine calcProb(tion, indion, tele, ks, olap)
     implicit none
 
     type(TDKS), intent(inout) :: ks
+    type(overlap), intent(in) :: olap
     integer, intent(in) :: tion, indion, tele
 
     integer :: i
@@ -62,11 +63,11 @@ module fssh
       Akk_c = REAL(CONJG(ks%psi_c(i)) * ks%psi_c(i), kind=q)
 
       !Changed the matrix structure for NAC. 
-      !Now NAC(i,j) is stored as  ks%NAcoup(j,i,time)
+      !Now NAC(i,j) is stored as  olap%Dij(j,i,time)
       Bkm_c = REAL(CONJG(ks%psi_c(i)) * ks%psi_c(:) * &
-                   calcDij(ks%NAcoup(:,i,tion-1),ks%NAcoup(:,i,tion),ks%NAcoup(:,i,tion+1),tele), kind=q)
+                   calcDij(olap%Dij(:,i,tion-1),olap%Dij(:,i,tion),olap%Dij(:,i,tion+1),tele), kind=q)
       Bkm_p = REAL(CONJG(ks%psi_p(i)) * ks%psi_p(:) * &
-                   calcDij(ks%NAcoup(:,i,tion-1),ks%NAcoup(:,i,tion),ks%NAcoup(:,i,tion+1),tele-1), kind=q)
+                   calcDij(olap%Dij(:,i,tion-1),olap%Dij(:,i,tion),olap%Dij(:,i,tion+1),tele-1), kind=q)
 
       ks%sh_prob(:, i, indion) = ks%sh_prob(:, i, indion) + &
                                  (Bkm_p / Akk_p + Bkm_c / Akk_c) * edt
@@ -74,10 +75,11 @@ module fssh
 
   end subroutine
     
-  subroutine calcProbwithDBC(tion, indion, ks)
+  subroutine calcProbwithDBC(tion, indion, ks, olap)
     implicit none
 
     type(TDKS), intent(inout) :: ks
+    type(overlap), intent(in) :: olap
     integer, intent(in) :: tion, indion
 
     integer :: i, j
@@ -89,8 +91,8 @@ module fssh
     ! Beware there is a tricky part: 
     ! P_ij * EXP(-dE/kT) != SUM(P_ij/N * EXP(-dE/N/kT)) = P_ij * EXP(-dE/NkT)
     do i = 1, ks%ndim        
-      dE = ((ks%eigKs(:,tion) + ks%eigKs(:,tion+1)) - &
-            (ks%eigKs(i,tion) + ks%eigKs(i,tion+1))) / 2.0_q
+      dE = ((olap%Eig(:,tion) + olap%Eig(:,tion+1)) - &
+            (olap%Eig(i,tion) + olap%Eig(i,tion+1))) / 2.0_q
       if (inp%LHOLE) then
         dE = -dE
       end if
@@ -103,9 +105,11 @@ module fssh
   end subroutine
 
 
-  subroutine runSE(ks)
+  subroutine runSE(ks, olap)
     implicit none
     type(TDKS), intent(inout) :: ks
+    type(overlap), intent(in) :: olap
+
     integer :: tion, indion, tele
     integer :: istat, cstat
     real(kind=q) :: norm, edt
@@ -126,29 +130,29 @@ module fssh
         select case (inp%ALGO_INT)
         case (0)
           ks%psi_p = ks%psi_c
-          call make_hamil(tion, tele, ks)
+          call make_hamil(tion, tele, olap, ks)
           call Trotter(ks, edt)
         case (11) ! this method will accumulate error! May renormalize wfc.
           ks%psi_p = ks%psi_c
-          call make_hamil(tion, tele, ks)
+          call make_hamil(tion, tele, olap, ks)
           call Euler(ks, edt)
         case (10)
           if (init) then
             ks%psi_p = ks%psi_c
-            call make_hamil(tion, tele, ks)
+            call make_hamil(tion, tele, olap, ks)
             call Euler(ks, edt)
             init = .FALSE.
           else
-            call make_hamil2(tion, tele-1, ks)
+            call make_hamil2(tion, tele-1, olap, ks)
             call EulerMod(ks, edt)
           end if
         case (2)
           ks%psi_p = ks%psi_c
-          call make_hamil(tion, tele, ks)
+          call make_hamil(tion, tele, olap, ks)
           call DiagonizeMat(ks, edt)
           ks%psi_c = HamPsi(ks%ham_c, ks%psi_c, 'N')
         end select
-        if (inp%LSHP) call calcProb(tion, indion, tele, ks)
+        if (inp%LSHP) call calcProb(tion, indion, tele, ks, olap)
       end do
       norm = REAL(SUM(CONJG(ks%psi_c) * ks%psi_c), kind=q) 
       if ( norm <= 0.99_q .OR. norm >= 1.01_q)  then
@@ -156,7 +160,7 @@ module fssh
         stop
       end if
 
-      if (inp%LSHP) call calcProbwithDBC(tion, indion, ks)
+      if (inp%LSHP) call calcProbwithDBC(tion, indion, ks, olap)
       ks%pop_a(:, indion+1) = REAL(CONJG(ks%psi_c) * ks%psi_c, kind=q)
       ks%psi_a(:, indion+1) = ks%psi_c 
 
@@ -164,17 +168,15 @@ module fssh
   end subroutine
 
   ! calculate surface hopping probabilities
-  subroutine runSH(ks)
+  subroutine runSH(ks, olap)
     implicit none
 
     type(TDKS), intent(inout) :: ks
+    type(overlap), intent(in) :: olap
     integer :: i, tion, indion
     integer :: istat, cstat, which
 
     istat = inp%INIBAND
-
-    ! initialize the random seed for ramdom number production
-    call init_random_seed()
 
     do i=1, inp%NTRAJ
       ! in the first step, current step always equal initial step
@@ -196,9 +198,10 @@ module fssh
 
   end subroutine
 
-  subroutine printSE(ks)
+  subroutine printSE(ks, olap)
     implicit none
     type(TDKS), intent(in) :: ks
+    type(overlap), intent(in) :: olap
 
     integer :: i, ierr
     integer :: tion, indion
@@ -219,10 +222,10 @@ module fssh
     do indion=1, inp%NAMDTIME
       tion = indion + inp%NAMDTINI - 1
       write(unit=25, fmt=out_fmt_cmplx) indion * inp%POTIM, &
-                                  SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)), &
+                                  SUM(olap%Eig(:,tion) * ks%pop_a(:,indion)), &
                                   (ks%psi_a(i,indion), i=1, ks%ndim)
       write(unit=26, fmt=out_fmt) indion * inp%POTIM, &
-                                  SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)), &
+                                  SUM(olap%Eig(:,tion) * ks%pop_a(:,indion)), &
                                   (ks%pop_a(i,indion), i=1, ks%ndim)
     end do
 
@@ -231,9 +234,10 @@ module fssh
 
   end subroutine
 
-  subroutine printSH(ks)
+  subroutine printSH(ks, olap)
     implicit none
     type(TDKS), intent(in) :: ks
+    type(overlap), intent(in) :: olap
 
     integer :: i, ierr
     integer :: tion, indion
@@ -252,7 +256,7 @@ module fssh
     do indion=1, inp%NAMDTIME
       tion = indion + inp%NAMDTINI - 1
       write(unit=24, fmt=out_fmt) indion * inp%POTIM, &
-                                  SUM(ks%eigKs(:,tion) * ks%sh_pops(:,indion)), &
+                                  SUM(olap%Eig(:,tion) * ks%sh_pops(:,indion)), &
                                   (ks%sh_pops(i,indion), i=1, ks%ndim)
     end do
 
@@ -292,7 +296,7 @@ module fssh
     do indion=1, inp%NAMDTIME
       tion = indion + inp%NAMDTINI - 1
       write(unit=51, fmt=out_fmt) indion * inp%POTIM, & 
-                                  SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)) / inp%NACELE, &
+                                  ! SUM(ks%eigKs(:,tion) * ks%pop_a(:,indion)) / inp%NACELE, &
                                   (ks%mppop_a(i,indion), i=1, inp%NBADNS)
     end do
 
@@ -318,7 +322,7 @@ module fssh
       do indion=1, inp%NAMDTIME
         tion = indion + inp%NAMDTINI - 1
         write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
-                                    SUM(ks%eigKs(:,tion) * ks%sh_pops(:,indion)) / inp%NACELE, &
+                                    ! SUM(ks%eigKs(:,tion) * ks%sh_pops(:,indion)) / inp%NACELE, &
                                     (ks%sh_mppops(i,indion), i=1, inp%NBADNS)
       end do
   

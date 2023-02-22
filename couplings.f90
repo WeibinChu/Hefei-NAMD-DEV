@@ -7,6 +7,9 @@ module couplings
   private :: readNaEig, initSpace
 
   type overlap
+    logical :: LLONG
+    integer :: LBD
+    integer :: UBD
     integer :: NBANDS !! NBASIS
     integer :: TSTEPS !! NSW
     real(kind=q) :: dt
@@ -23,27 +26,30 @@ contains
     type(overlap), intent(out) :: olap
     type(overlap), intent(out) :: olap_sp !! single particle overlap
 
-    logical :: lcoup
-
+    ! AIMD, usually NSW < MAXSIZE, here store all coup coeff.
+    ! DPMD, usually NSW > MAXSIZE, here store M+2 coeff.
+    olap%LLONG    = (inp%NSW > MAXSIZE)
+    olap_sp%LLONG = (inp%NSW > MAXSIZE)
+    if (inp%ALGO == 'FSSH' .AND. olap%LLONG) then
+      write(*,*) "[E] The NSW is too long for a FSSH calculation."
+      stop
+    end if
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Initialization
     olap%NBANDS = inp%NBASIS
     olap%TSTEPS = inp%NSW
     olap%dt = inp%POTIM
-    !Trotter factorization integrator is not compatible with complex NAC
-    allocate(olap%Dij(olap%NBANDS, olap%NBANDS, olap%TSTEPS))
-    allocate(olap%Eig(olap%NBANDS, olap%TSTEPS))
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     olap_sp%NBANDS = inp%BMAX - inp%BMIN + 1
     olap_sp%TSTEPS = inp%NSW
     olap_sp%dt = inp%POTIM
-    allocate(olap_sp%Dij(olap_sp%NBANDS, olap_sp%NBANDS, olap_sp%TSTEPS))
-    allocate(olap_sp%Eig(olap_sp%NBANDS, olap_sp%TSTEPS))
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    inquire(file='COUPCAR', exist=lcoup)
-    if (lcoup) then
-      ! file containing couplings exists, then read it
+    !Trotter factorization integrator is not compatible with complex NAC
+    if (.NOT. olap%LLONG) then
+      allocate(olap%Dij(olap%NBANDS, olap%NBANDS, olap%TSTEPS))
+      allocate(olap%Eig(olap%NBANDS, olap%TSTEPS))
+      allocate(olap_sp%Dij(olap_sp%NBANDS, olap_sp%NBANDS, olap_sp%TSTEPS))
+      allocate(olap_sp%Eig(olap_sp%NBANDS, olap_sp%TSTEPS))
+      ! read coupling from EIGTXT and NATXT
       if (inp%LCPTXT) then
         call readNaEig(olap_sp)
         if (inp%LSPACE) then
@@ -55,13 +61,21 @@ contains
         write(*,*) "[E] This version does not support coupling from COUPCAR, please use NATXT"
         stop
       end if
-    else
-      write(*,*) "[E] IOError: COUPCAR does not exist."
-      stop
+    else !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      allocate(olap%Dij(olap%NBANDS, olap%NBANDS, MAXSIZE+2))
+      allocate(olap%Eig(olap%NBANDS, MAXSIZE+2))
+      allocate(olap_sp%Dij(olap_sp%NBANDS, olap_sp%NBANDS, MAXSIZE+2))
+      allocate(olap_sp%Eig(olap_sp%NBANDS, MAXSIZE+2))
+      ! read coupling from EIGTXT and NATXT
+      if (inp%LCPTXT) then
+        call readLongNaEig(olap, olap_sp)
+      else
+        write(*,*) "[E] This version does not support coupling from COUPCAR, please use NATXT"
+        stop
+      end if
     end if
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    olap%Dij = olap%Dij / (2*inp%POTIM)
-    olap_sp%Dij = olap_sp%Dij / (2*inp%POTIM)
     ! deallocate(olap_sp%Dij, olap_sp%Eig)
   end subroutine
 
@@ -97,8 +111,74 @@ contains
       call inp%setHLORB(olap%NBANDS, 1)
     end if
 
+    olap%Dij = olap%Dij / (2*inp%POTIM)
+
     close(unit=22)
     close(unit=23)
+  end subroutine
+
+  subroutine readLongNaEig(olap, olap_sp)
+    implicit none
+
+    type(overlap), intent(inout) :: olap, olap_sp
+    integer :: i, ii, j, k, N, ierr
+
+    !!!!!!!!!!!!!!!!!!!
+    ! SAVE:    1 ~  M+2
+    !        M+3 ~ 2M+4
+    !       2M+5 ~ 3M+6
+
+    open(unit=22, file='EIGTXT', status='unknown', action='read', iostat=ierr)
+    if (ierr /= 0) then
+      write(*,*) "[E] IOError: EIGTXT does NOT exist!"
+      stop
+    end if
+    open(unit=23, file='NATXT', status='unknown', action='read', iostat=ierr)
+    if (ierr /= 0) then
+      write(*,*) "[E] IOError: NATXT does NOT exist!"
+      stop
+    end if
+    open(unit=42, file='EIGTMP', form='unformatted', status='unknown', &
+         access='stream', action='write', iostat=ierr)
+    open(unit=43, file='NATMP', form='unformatted', status='unknown',  &
+         access='stream', action='write', iostat=ierr)
+    if (ierr /= 0) then
+      write(*,*) "[E] IOError: Can not write to EIGTMP file."
+      stop
+    end if
+
+    ! init
+    N = olap_sp%NBANDS
+
+    if (inp%LHOLE) then
+      call inp%setHLORB(1, N)
+    else
+      call inp%setHLORB(N, 1)
+    end if
+
+    do ii=1, inp%NSW, MAXSIZE+2
+
+      read(unit=22, fmt=*, iostat=ierr) ((olap_sp%Eig(i,k), i=1, N), k=1, MAXSIZE+2)
+      read(unit=23, fmt=*, iostat=ierr) (((olap_sp%Dij(j, i, k), j=1, N), i=1, N), k=1, MAXSIZE+2)
+
+      olap_sp%Dij = olap_sp%Dij / (2*inp%POTIM)
+
+      !! init_space
+      if (inp%LSPACE) then
+        call initSpace(olap, olap_sp)
+      else
+        olap = olap_sp
+      end if
+
+      ! write
+      write(unit=42) olap%Eig
+      write(unit=43) olap%Dij
+    end do
+
+    close(22)
+    close(23)
+    close(42)
+    close(43)
   end subroutine
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -118,20 +198,12 @@ contains
     real(q) :: heig, leig
     integer, dimension(inp%NACELE) :: bi, bj
     logical :: beq = .false.
-    real(q), dimension(olap%TSTEPS) :: eig_gs !! ground state eigenvalue
 
     open(unit=35, file='ACEIGTXT', status='unknown', action='write', iostat=ierr)
     open(unit=36, file='ACNATXT', status='unknown', action='write', iostat=ierr)
 
-    eig_gs = 0.0_q
     olap%Eig = 0.0_q
     olap%Dij = 0.0_q
-
-    ! Gound State Energy
-    ! do j=1,inp%NACELE
-    !   band = inp%BASIS(j,1) - inp%BMIN + 1
-    !   eig_gs(:) = eig_gs(:) + olap_sp%Eig(band,:)
-    ! end do
 
     ! Excite State Energy
     do i=1,inp%NBASIS
@@ -163,10 +235,6 @@ contains
     do N=1,inp%NSW
       olap%Eig(:,N) = olap%Eig(:,N) - olap%Eig(inp%LORB,N)
     end do
-
-    ! do N=1,inp%NSW
-    !   olap%Eig(:,N) = olap%Eig(:,N) - eig_gs(N)
-    ! end do
 
     ! NAC Matrix Elements, anti-hermite, assuming real Dij = -Dji
     !         N                  N
@@ -203,6 +271,42 @@ contains
       write(unit=36,fmt=*) ((olap%Dij(j,i,N), j=1, olap%NBANDS), &
                                               i=1, olap%NBANDS)
     end do
+  end subroutine
+
+  subroutine setOlapBoundry(olap, start)
+    implicit none
+    type(overlap), intent(inout) :: olap
+    integer, intent(in) :: start
+    integer :: ierr
+
+    if (.NOT. olap%LLONG) return
+
+    olap%LBD = start - 1
+    olap%UBD = olap%LBD + MAXSIZE + 1
+
+    if (allocated(olap%Eig)) then
+      deallocate(olap%Eig)
+      deallocate(olap%Dij)
+    end if
+    allocate(olap%Eig(olap%NBANDS, olap%LBD : olap%UBD))
+    allocate(olap%Dij(olap%NBANDS, olap%NBANDS, olap%LBD : olap%UBD))
+
+    ! read 
+    open(unit=42, file='EIGTMP', form='unformatted', status='unknown', &
+         access='stream', action='read', iostat=ierr)
+    open(unit=43, file='NATMP', form='unformatted', status='unknown',  &
+         access='stream', action='read', iostat=ierr)
+    if (ierr /= 0) then
+      write(*,*) "[E] Read EIG and NA from TMP file fails."
+      stop
+    end if
+
+    ! start from 1.
+    read(unit=42, iostat=ierr, pos=1+kind(0.0_q)*olap%NBANDS*(olap%LBD-1)) olap%Eig
+    read(unit=43, iostat=ierr, pos=1+kind(0.0_q)*olap%NBANDS*olap%NBANDS*(olap%LBD-1)) olap%Dij
+
+    close(42)
+    close(43)
   end subroutine
 
 end module

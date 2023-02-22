@@ -3,6 +3,7 @@ module dish
   use constants
   use fileio
   use utils
+  use parallel
   use couplings
   use hamil
   use TimeProp
@@ -12,6 +13,7 @@ module dish
   implicit none
 
   private :: calcDect, whichToDec, projector
+  private :: printDISH, printMPDISH
 
 contains
 
@@ -72,9 +74,10 @@ contains
     end do
   end subroutine
 
-  subroutine projector(ks, COEFFISQ, which, tion, indion, cstat, iend, fgend, ks0)
+  subroutine projector(ks, COEFFISQ, which, tion, indion, cstat, iend, fgend, ks0, olap)
     implicit none
     type(TDKS), intent(inout) :: ks, ks0
+    type(overlap), intent(in) :: olap
     real(kind=q), dimension(ks%ndim), intent(inout) :: COEFFISQ !! |c_i(t)|^2
 
     integer, intent(in) :: which, tion, indion, iend
@@ -91,8 +94,8 @@ contains
     !! hopping probability with Boltzmann factor
     popBoltz = COEFFISQ
 
-    dE = ((ks0%eigKs(  :  ,tion) + ks0%eigKs(  :  , tion+1)) - &
-          (ks0%eigKs(cstat,tion) + ks0%eigKs(cstat, tion+1))) /2.0_q
+    dE = ((olap%Eig(  :  ,tion) + olap%Eig(  :  , tion+1)) - &
+          (olap%Eig(cstat,tion) + olap%Eig(cstat, tion+1))) /2.0_q
     if (inp%LHOLE) then
       dE = -dE
     end if
@@ -100,17 +103,6 @@ contains
       popBoltz = popBoltz * exp(-dE / kbT)
     end where
     popOnWhich = popBoltz(which)
-    ! popBoltz = COEFFISQ(which)
-
-    ! dE = ((ks0%eigKs(which,tion) + ks0%eigKs(which, tion+1)) - &
-    !       (ks0%eigKs(cstat,tion) + ks0%eigKs(cstat, tion+1))) /2.0_q
-    ! if (inp%LHOLE) then
-    !   dE = -dE
-    ! end if
-    ! if ( dE > 0.0_q ) then
-    !   popBoltz = popBoltz * exp(-dE / kbT)
-    ! end if
-    !write(*,*) which,popBoltz
 
     if (r <= popOnWhich) then
     !! project in, hop: cstat -> which
@@ -118,7 +110,7 @@ contains
       ks%psi_c(which) = con%uno
 
       if ((.NOT. fgend) .AND. which == iend) then
-        ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q/inp%NTRAJ
+        ks0%dish_pops(cstat, (indion+1):) = ks0%dish_pops(cstat, (indion+1):) + 1.0_q/inp%NTRAJ
         fgend = .TRUE.
       end if
 
@@ -154,7 +146,7 @@ contains
         if (lower <= r .AND. r < upper) then
           if ((.NOT. fgend) .AND. i == iend) then
             ! Here use decimal part of dish_pops to store the recom_pops matrix.
-            ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) = ks0%dish_pops(cstat, (indion+1):inp%NAMDTIME) + 1.0_q/inp%NTRAJ
+            ks0%dish_pops(cstat, (indion+1):) = ks0%dish_pops(cstat, (indion+1):) + 1.0_q/inp%NTRAJ
             fgend = .TRUE.
           end if
           cstat = i !! Hop to i
@@ -170,7 +162,7 @@ contains
   subroutine runDISH(ks, olap)
     implicit none
     type(TDKS), intent(inout) :: ks
-    type(overlap), intent(in) :: olap
+    type(overlap), intent(inout) :: olap
 
     integer :: i, N, tion, indion, tele
     logical :: init
@@ -186,7 +178,10 @@ contains
     integer, dimension(ks%ndim)                :: shuffle
     real(kind=q), dimension(ks%ndim)           :: COEFFISQ  !! |c_i(t)|^2
     real(kind=q), dimension(ks%ndim)           :: DECOTIME  !! tau_i(t)
+    real(kind=q), dimension(ks%ndim)           :: tmp_pops
 
+    integer :: lbd, ubd, uboundry
+    integer :: lower, upper
     integer :: ierr
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -197,10 +192,11 @@ contains
     !        4  A...B..A...B..C....
     !        5  A...B..A...B..C....
 #ifdef ENABLEMPI
-    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+    call MPI_BARRIER(inp%COMMUNICATOR, ierr)
 #endif
 
-    N = ceiling(REAL(inp%NTRAJ)/inp%NPROG)
+    ! N = ceiling(REAL(inp%NTRAJ)/inp%NPROG)
+    call divideTasks(inp%IPROG, inp%NPROG, inp%NTRAJ, lower, upper, N)
     allocate(ks_list(N))
     allocate(fgend(N))
     allocate(cstat(N))
@@ -211,223 +207,293 @@ contains
     cstat = istat
     fgend = .FALSE.
     init  = .TRUE.
+    lbd   = 2
+    ubd   = 1 ! For short verion, ubd <=> indion
+    uboundry = MAXSIZE
 
-    deallocate(ks%eigKs)
-    deallocate(ks%NAcoup)
     deallocate(ks%dish_pops)
-    deallocate(ks%recom_pops)
     ks_list = ks
-    allocate(ks%eigKs(ks%ndim, inp%NSW))
-    allocate(ks%NAcoup(ks%ndim, ks%ndim, inp%NSW))
-    allocate(ks%dish_pops(ks%ndim, inp%NAMDTIME))
-    if (inp%IPROG == 0) allocate(ks%recom_pops(ks%ndim,inp%NAMDTIME))
-    ks%eigKs = olap%Eig
-    ks%NAcoup = olap%Dij
+    allocate(ks%dish_pops(ks%ndim, MIN(MAXSIZE, inp%NAMDTIME)))
     ks%dish_pops = 0.0_q
-    if (inp%IPROG == 0) ks%recom_pops = 0.0_q
+    ks%dish_pops(inp%INIBAND, 1) = 1.0_q
 
     shuffle = [(i, i=1,ks%ndim)]
-
     edt = inp%POTIM / inp%NELM
 
+    ! long version. First ouput init condition. Then output M-1 at one time.
+    ! Beware coup is long enough.
+    call setOlapBoundry(olap, inp%NAMDTINI)
+    if (inp%IPROG == 0) then
+      call printDISH(ks, olap, lbd, ubd, step=0)
+      if (inp%LSPACE) call printMPDISH(ks, lbd, ubd, step=0)
+    end if
+
+    !! The loop start here. !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do indion = 1, inp%NAMDTIME - 1
-      ! NAMDTINI >= 2, tion+inp%NAMDTINI-1 <= NSW(FSSH), dump 1
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      !          S                  E
-      ! E1--D1--E2--D2--E3--D3------EN--DN--XX
-      !                         E1--D1--E2--D2--E3--D3------EN--DN--XX
-      !                              S                      E
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      if (.NOT. all(fgend)) then
+        ! NAMDTINI >= 2, tion+inp%NAMDTINI-1 <= NSW(FSSH), dump 1
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !          S                  E
+        ! E1--D1--E2--D2--E3--D3------EN--DN--XX
+        !                         E1--D1--E2--D2--E3--D3------EN--DN--XX
+        !                              S                      E
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-      ! for DISH, one cycle has NSW-2 intervals.
-      tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2) ! 2 <= tion <= 2+(NSW-3) = NSW-1
+        ! for DISH, one cycle has NSW-2 intervals.
+        tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2) ! 2 <= tion <= 2+(NSW-3) = NSW-1
 
-      do tele = 1, inp%NELM
-        select case (inp%ALGO_INT)
-        case (0)
-          call make_hamil(tion, tele, ks)
-          call TrotterMat(ks, edt)
-        case (11) ! this method will accumulate error! May renormalize wfc.
-          call make_hamil(tion, tele, ks)
-          call EulerMat(ks, edt)
-        case (10)
-          if (init) then
-            ks%psi_p = ks%psi_c
-            call make_hamil(tion, tele, ks)
-            call EulerMat(ks, edt)
-          else
-            call make_hamil2(tion, tele-1, ks)
-            call EulerModMat(ks, edt)
-          end if
-        case (2)
-          call make_hamil(tion, tele, ks)
-          call DiagonizeMat(ks, edt)
-        end select
-        ham = ks%ham_c
-
-        ! TODO init conflict with OMP
-        !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
-        do i = 1, N
+        do tele = 1, inp%NELM
           select case (inp%ALGO_INT)
+          case (0)
+            call make_hamil(tion, tele, olap, ks)
+            call TrotterMat(ks, edt)
+          case (11) ! this method will accumulate error! May renormalize wfc.
+            call make_hamil(tion, tele, olap, ks)
+            call EulerMat(ks, edt)
           case (10)
-            if (.NOT. init) then
-              ksi = ks_list(i)
-              ksi%psi_n = ksi%psi_p + HamPsi(ham, ksi%psi_p, 'T')
-              ksi%psi_p = ksi%psi_c
-              ksi%psi_c = ksi%psi_n
-              ks_list(i) = ksi
+            if (init) then
+              ks%psi_p = ks%psi_c
+              call make_hamil(tion, tele, olap, ks)
+              call EulerMat(ks, edt)
             else
-              ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
-              init = .FALSE.
+              call make_hamil2(tion, tele-1, olap, ks)
+              call EulerModMat(ks, edt)
             end if
-          case (11)
-            ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
-          case default
-            ks_list(i)%psi_c = HamPsi(ham, ks_list(i)%psi_c, 'N')
+          case (2)
+            call make_hamil(tion, tele, olap, ks)
+            call DiagonizeMat(ks, edt)
           end select
+          ham = ks%ham_c
+
+          ! TODO init conflict with OMP
+          !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi) IF (inp%NPARDISH > 1)
+          do i = 1, N
+            if (fgend(i)) cycle
+
+            select case (inp%ALGO_INT)
+            case (10)
+              if (.NOT. init) then
+                ksi = ks_list(i)
+                ksi%psi_n = ksi%psi_p + HamPsi(ham, ksi%psi_p, 'T')
+                ksi%psi_p = ksi%psi_c
+                ksi%psi_c = ksi%psi_n
+                ks_list(i) = ksi
+              else
+                ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
+                init = .FALSE.
+              end if
+            case (11)
+              ks_list(i)%psi_c = ks_list(i)%psi_c + HamPsi(ham, ks_list(i)%psi_c, 'T')
+            case default
+              ks_list(i)%psi_c = HamPsi(ham, ks_list(i)%psi_c, 'N')
+            end select
+          end do
+          !!$OMP END PARALLEL DO
+        end do
+      
+        !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
+        do i = 1, N
+          if (fgend(i)) cycle
+
+          ksi = ks_list(i)
+          norm = REAL(SUM(CONJG(ksi%psi_c) * ksi%psi_c), kind=q) 
+          if (norm <= 0.99_q .OR. norm >= 1.01_q)  then
+              write(*,*) "[E] Error in Electronic Propagation"
+              stop
+          end if
+
+          call calcDect(ksi, DECOTIME, COEFFISQ)   
+
+          ksi%dish_decmoment(:) = ksi%dish_decmoment(:) + inp%POTIM
+          call whichToDec(ksi, DECOTIME, which, shuffle)  
+          
+          if ( which > 0 ) then
+            call projector(ksi, COEFFISQ, which, tion, ubd, cstat(i), iend, fgend(i), ks, olap)
+          end if
+          
+          if ( fgend(i) ) then
+            ! recomb completed
+            ks%dish_pops(cstat(i), ubd+1:) = ks%dish_pops(cstat(i), ubd+1:) + 3.0_q
+          else
+            ks%dish_pops(cstat(i), ubd+1) = ks%dish_pops(cstat(i), ubd+1) + 3.0_q
+          end if
+
+          ks_list(i) = ksi
         end do
         !!$OMP END PARALLEL DO
-      end do
-     
-      !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,ksi,norm,which,COEFFISQ,DECOTIME) FIRSTPRIVATE(shuffle) IF (inp%NPARDISH > 1)
-      do i = 1, N
-        ksi = ks_list(i)
-        norm = REAL(SUM(CONJG(ksi%psi_c) * ksi%psi_c), kind=q) 
-        if (norm <= 0.99_q .OR. norm >= 1.01_q)  then
-            write(*,*) "[E] Error in Electronic Propagation"
-            stop
+      end if
+
+      ubd = ubd + 1
+      if (ubd == uboundry) then
+#ifdef ENABLEMPI
+        if (inp%NPROG > 1) then
+          call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, ks%ndim*MAXSIZE, MPI_REAL8, MPI_SUM, 0, inp%COMMUNICATOR, ierr)
         end if
-
-        call calcDect(ksi, DECOTIME, COEFFISQ)   
-
-        ksi%dish_decmoment(:) = ksi%dish_decmoment(:) + inp%POTIM
-        call whichToDec(ksi, DECOTIME, which, shuffle)  
-        
-        if ( which > 0 ) then
-          call projector(ksi, COEFFISQ, which, tion, indion, cstat(i), iend, fgend(i), ks)
+        call MPI_BARRIER(inp%COMMUNICATOR, ierr)
+#endif
+        tmp_pops = MOD(ks%dish_pops(:,ubd), 1.0_q)
+        if (inp%IPROG == 0) then
+          call printDISH(ks, olap, lbd, ubd, step=1)
+          if (inp%LSPACE) call printMPDISH(ks, lbd, ubd, step=1)
         end if
-        
-        ks%dish_pops(cstat(i), indion+1) = ks%dish_pops(cstat(i), indion+1) + 3.0_q
-
-        ks_list(i) = ksi
-      end do
-      !!$OMP END PARALLEL DO
+        ! refresh
+        lbd = ubd + 1
+        ubd = ubd
+        uboundry = ubd+MAXSIZE-1
+        ! recom: keep accumulating. Copy from the last of the old list.
+        ! pops:  keep changing, except those have recombined. 
+        !        The first of the new list is wrong, but useless.
+        deallocate(ks%dish_pops)
+        allocate(ks%dish_pops(ks%ndim, ubd:ubd+MAXSIZE-1))
+        ks%dish_pops = 0.0_q
+        ks%dish_pops(iend,:) = 3.0_q * COUNT(fgend)
+        if (inp%IPROG == 0) then
+          do i = ubd, ubd+MAXSIZE-1
+            ks%dish_pops(:,i) = ks%dish_pops(:,i) + tmp_pops
+          end do
+        end if
+        call setOlapBoundry(olap, tion+1)
+      end if
     end do
+    !! The loop end here. !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #ifdef ENABLEMPI
     ! MPI_REDUCE(SENDBUF, RECVBUF, COUNT, DATATYPE, OP, ROOT, COMM, IERROR)
     ! Buffer parameters inbuf and inoutbuf must not be aliased
     ! use +0 bypass it.
     if (inp%NPROG > 1) then
-      call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, ks%ndim*inp%NAMDTIME, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+      call MPI_REDUCE(ks%dish_pops+0.0_q, ks%dish_pops, size(ks%dish_pops), MPI_REAL8, MPI_SUM, 0, inp%COMMUNICATOR, ierr)
     end if
-    !call MPI_REDUCE(ks%recom_pops+0.0_q,ks%recom_pops,ks%ndim*inp%NAMDTIME, MPI_REAL8, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-    if (inp%IPROG == 0) then
+    call MPI_BARRIER(inp%COMMUNICATOR, ierr)
 #endif
-    ks%recom_pops = MOD(ks%dish_pops, 1.0_q)
-    ks%dish_pops = NINT(ks%dish_pops/3) / REAL(inp%NTRAJ, kind=q)
-    ! ks%dish_pops = ks%dish_pops / inp%NTRAJ
-    ks%dish_pops(inp%INIBAND, 1) = 1.0_q
-    ! ks%recom_pops = ks%recom_pops / inp%NTRAJ
+
+    if (inp%IPROG == 0) then
+      call printDISH(ks, olap, lbd, ubd, step=2)
+      if (inp%LSPACE) call printMPDISH(ks, lbd, ubd, step=2)
+    end if
 
     deallocate(ks_list)
     deallocate(fgend)
     deallocate(cstat)
-
-#ifdef ENABLEMPI
-    end if
-    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
-#endif
   end subroutine
 
 
-  subroutine printDISH(ks)
+  subroutine printDISH(ks, olap, lbd, ubd, step)
     implicit none
     type(TDKS), intent(in) :: ks
+    type(overlap), intent(in) :: olap
+    integer, intent(in) :: lbd, ubd, step !! step = 0|1|2 init|-|stop
 
     integer :: i, tion, indion, ierr
     character(len=48) :: buf
     character(len=48) :: out_fmt
     real(kind=q), allocatable, dimension(:,:) :: avgene
+    real(kind=q), allocatable, dimension(:,:) :: dish_pops, recom_pops
 
     write(buf, *) inp%NAMDTINI
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  ks%ndim
 
-    if (inp%LBINOUT) then
-      allocate(avgene(3, inp%NAMDTIME)) ! tion, time, avgene
-      do indion=1, inp%NAMDTIME
-        tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
-        avgene(:,indion) = [REAL(tion, kind=q), &
-                            indion * inp%POTIM, &
-                            SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion))]
-      end do
+    if (step == 0) then
+      indion = 1
+      tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
+      ! open, in the init step ks%dish_pops is the real pop & ks%recom_pops = 0
+      if (inp%LBINOUT) then
+        open(unit=27,                                   &
+             file='AVGENE.bin.' // trim(adjustl(buf)),  &
+             form='unformatted',                        &
+             status='unknown',                          &
+             access='stream',                           &
+             action='write',                            &
+             iostat=ierr)
+        open(unit=24,                                   &
+             file='SHPROP.bin.' // trim(adjustl(buf)),  &
+             form='unformatted',                        &
+             status='unknown',                          &
+             access='stream',                           &
+             action='write',                            &
+             iostat=ierr)
+        open(unit=28,                                   &
+             file='RECOMB.bin.' // trim(adjustl(buf)),  &
+             form='unformatted',                        &
+             status='unknown',                          &
+             access='stream',                           &
+             action='write',                            &
+             iostat=ierr)
+        if (ierr /= 0) then
+          write(*,*) "[E] IOError: SHPROP.bin file I/O error!"
+          stop
+        end if
 
-      open(unit=27,                                   &
-           file='AVGENE.bin.' // trim(adjustl(buf)),  &
-           form='unformatted',                        &
-           status='unknown',                          &
-           access='direct',                           &
-           recl=kind(0.0_q) * 3 * inp%NAMDTIME,       &
-           action='write',                            &
-           iostat=ierr)
-      open(unit=24,                                   &
-           file='SHPROP.bin.' // trim(adjustl(buf)),  &
-           form='unformatted',                        &
-           status='unknown',                          &
-           access='direct',                           &
-           recl=kind(0.0_q) * ks%ndim * inp%NAMDTIME, &
-           action='write',                            &
-           iostat=ierr)
-      open(unit=28,                                   &
-           file='RECOMB.bin.' // trim(adjustl(buf)),  &
-           form='unformatted',                        &
-           status='unknown',                          &
-           access='direct',                           &
-           recl=kind(0.0_q) * ks%ndim * inp%NAMDTIME, &
-           action='write',                            &
-           iostat=ierr)
+        write(unit=27) [REAL(tion, kind=q), &
+                        indion * inp%POTIM, &
+                        SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion))]
+        write(unit=24) ks%dish_pops(:,indion)
+        write(unit=28) (0.0_q, i=1, ks%ndim)
+        return
+      end if
+
+      open(unit=24, file='SHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
+      open(unit=28, file='RECOMB.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
       if (ierr /= 0) then
-        write(*,*) "[E] IOError: SHPROP.bin file I/O error!"
+        write(*,*) "[E] IOError: SHPROP file I/O error!"
         stop
       end if
 
-      write(unit=27,rec=1) avgene
-      write(unit=24,rec=1) ks%dish_pops
-      write(unit=28,rec=1) ks%recom_pops
+      write(unit=24,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion)), &
+                            (ks%dish_pops(i,indion), i=1, ks%ndim)
 
-      deallocate(avgene)
-      close(27)
-      close(24)
-      close(28)
+      write(unit=28,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * ks%dish_pops(:,indion)), &
+                            (0.0_q, i=1, ks%ndim)
 
       return
     end if
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    open(unit=24, file='SHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
-    open(unit=28, file='RECOMB.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
-    if (ierr /= 0) then
-      write(*,*) "[E] IOError: SHPROP file I/O error!"
-      stop
+    allocate(dish_pops(ks%ndim, lbd:ubd))
+    allocate(recom_pops(ks%ndim, lbd:ubd))
+    dish_pops = NINT(ks%dish_pops(:, lbd:ubd)/3) / REAL(inp%NTRAJ, kind=q)
+    recom_pops = MOD(ks%dish_pops(:, lbd:ubd), 1.0_q)
+
+    if (inp%LBINOUT) then
+      allocate(avgene(3, lbd:ubd)) ! tion, time, avgene
+      do indion=lbd, ubd
+        tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
+        avgene(:,indion) = [REAL(tion, kind=q), &
+                            indion * inp%POTIM, &
+                            SUM(olap%Eig(:,tion) * dish_pops(:,indion))]
+      end do
+
+      write(unit=27) avgene
+      write(unit=24) dish_pops
+      write(unit=28) recom_pops
+      deallocate(avgene)
+    else
+      do indion=lbd, ubd
+        tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
+
+        write(unit=24,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * dish_pops(:,indion)), &
+                              (dish_pops(i,indion), i=1, ks%ndim)
+
+        write(unit=28,fmt=out_fmt) indion * inp%POTIM, SUM(olap%Eig(:,tion) * dish_pops(:,indion)), &
+                              (recom_pops(i,indion), i=1, ks%ndim)
+      end do
     end if
-
-    do indion=1, inp%NAMDTIME
-      tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
-
-      write(unit=24,fmt=out_fmt) indion * inp%POTIM, SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)), &
-                            (ks%dish_pops(i,indion), i=1, ks%ndim)
-
-      write(unit=28,fmt=out_fmt) indion * inp%POTIM, SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)), &
-                            (ks%recom_pops(i,indion), i=1, ks%ndim)
-    end do
-
-    close(24)
-    close(28)
+    deallocate(dish_pops)
+    deallocate(recom_pops)
+    
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    if (step == 2) then
+      if (inp%LBINOUT) close(27)
+      close(24)
+      close(28)
+    end if
 
   end subroutine
 
-  subroutine printMPDISH(ks)
+  subroutine printMPDISH(ks, lbd, ubd, step)
     implicit none
     type(TDKS), intent(inout) :: ks
+    integer, intent(in) :: lbd, ubd, step !! step = 0|1|2 init|-|stop
 
     integer :: i, ierr
     integer :: bi, tion, indion
@@ -435,53 +501,86 @@ contains
 
     character(len=48) :: buf
     character(len=48) :: out_fmt
+    real(kind=q), allocatable, dimension(:,:) :: dish_mppops
 
     write(buf, *) inp%NAMDTINI
     write (out_fmt, '( "(f13.2,f11.6, ", I5, "(f11.6))" )' )  inp%NBADNS
 
-    ks%dish_mppops = 0.0_q
+    if (step == 0) then
+      indion = 1
+      tion = 2 + MOD(indion+inp%NAMDTINI-1-2,inp%NSW-2)
+
+      allocate(dish_mppops(inp%NBADNS, 1))
+      dish_mppops = 0.0_q
+      do i=1, ks%ndim
+        bands = inp%BASIS(:,i) - inp%BMIN + 1
+        do bi=1, inp%NACELE
+          dish_mppops(bands(bi),:) = dish_mppops(bands(bi),:) + &
+                                     ks%dish_pops(i,:)
+        end do
+      end do
+      ! open, in the init step ks%dish_pops is the real pop & ks%recom_pops = 0
+      if (inp%LBINOUT) then
+        open(unit=52,                                      &
+             file='MPSHPROP.bin.' // trim(adjustl(buf)),   &
+             form='unformatted',                           &
+             status='unknown',                             &
+             access='stream',                              &
+             action='write',                               &
+             iostat=ierr)
+        if (ierr /= 0) then
+          write(*,*) "[E] IOError: MPSHPROP.bin file I/O error!"
+          stop
+        end if
+
+        write(unit=52) dish_mppops
+        deallocate(dish_mppops)
+        return
+      end if
+
+      open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
+      if (ierr /= 0) then
+        write(*,*) "[E] IOError: MPSHPROP file I/O error!"
+        stop
+      end if
+
+      write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
+                                  ! SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)) / inp%NACELE, &
+                                  (dish_mppops(i,indion), i=1, inp%NBADNS)
+      deallocate(dish_mppops)
+      return
+    end if
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    allocate(dish_mppops(inp%NBADNS, lbd:ubd))
+    dish_mppops = 0.0_q
+    ks%dish_pops = NINT(ks%dish_pops/3) / REAL(inp%NTRAJ, kind=q)
+
     do i=1, ks%ndim
       bands = inp%BASIS(:,i) - inp%BMIN + 1
       do bi=1, inp%NACELE
-        ks%dish_mppops(bands(bi),:) = ks%dish_mppops(bands(bi),:) + &
-                                      ks%dish_pops(i,:)
+        dish_mppops(bands(bi),:) = dish_mppops(bands(bi),:) + &
+                                   ks%dish_pops(i,lbd:ubd)
       end do
     end do
 
     if (inp%LBINOUT) then
-      open(unit=52,                                      &
-           file='MPSHPROP.bin.' // trim(adjustl(buf)),   &
-           form='unformatted',                           &
-           status='unknown',                             &
-           access='direct',                              &
-           recl=kind(0.0_q) * inp%NBADNS * inp%NAMDTIME, &
-           action='write',                               &
-           iostat=ierr)
-      if (ierr /= 0) then
-        write(*,*) "[E] IOError: MPSHPROP.bin file I/O error!"
-        stop
-      end if
+      write(unit=52) dish_mppops
+    else
+      do indion=lbd, ubd
+        tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2)
 
-      write(unit=52,rec=1) ks%dish_mppops
-      
+        write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
+                                    ! SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)) / inp%NACELE, &
+                                    (dish_mppops(i,indion), i=1, inp%NBADNS)
+      end do
+    end if
+    deallocate(dish_mppops)
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    if (step == 2) then
       close(52)
-      return
     end if
-
-    open(unit=52, file='MPSHPROP.' // trim(adjustl(buf)), status='unknown', action='write', iostat=ierr)
-    if (ierr /= 0) then
-      write(*,*) "[E] IOError: MPSHPROP file I/O error!"
-      stop
-    end if
-
-    do indion=1, inp%NAMDTIME
-      tion = 2 + MOD(indion+inp%NAMDTINI-1-2, inp%NSW-2)
-      write(unit=52, fmt=out_fmt) indion * inp%POTIM, & 
-                                  SUM(ks%eigKs(:,tion) * ks%dish_pops(:,indion)) / inp%NACELE, &
-                                  (ks%dish_mppops(i,indion), i=1, inp%NBADNS)
-    end do
-
-    close(52)
 
   end subroutine
 
