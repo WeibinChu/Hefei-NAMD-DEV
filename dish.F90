@@ -129,30 +129,30 @@ contains
       !! renormalize COEFFISQ, so SUM(|c_j(t)|^2) = 1
       ! COEFFISQ = COEFFISQ / norm_c 
       ! call random_number(r)
-      popBoltz(which) = 0.0_q
-      do i=1, ks%ndim
-        if (i == 1) then
-          ! lower = 0.0_q
-          ! upper = COEFFISQ(i)
-          lower = popOnWhich 
-          upper = popOnWhich + popBoltz(i)
-        else
-          ! lower = upper
-          ! upper = upper + COEFFISQ(i)
-          lower = upper
-          upper = upper + popBoltz(i)
-        end if
-
-        if (lower <= r .AND. r < upper) then
-          if ((.NOT. fgend) .AND. i == iend) then
-            ! Here use decimal part of dish_pops to store the recom_pops matrix.
-            ks0%dish_pops(cstat, (indion+1):) = ks0%dish_pops(cstat, (indion+1):) + 1.0_q/inp%NTRAJ
-            fgend = .TRUE.
-          end if
-          cstat = i !! Hop to i
-          exit
-        end if
-      end do
+!      popBoltz(which) = 0.0_q
+!      do i=1, ks%ndim
+!        if (i == 1) then
+!          ! lower = 0.0_q
+!          ! upper = COEFFISQ(i)
+!          lower = popOnWhich 
+!          upper = popOnWhich + popBoltz(i)
+!        else
+!          ! lower = upper
+!          ! upper = upper + COEFFISQ(i)
+!          lower = upper
+!          upper = upper + popBoltz(i)
+!        end if
+!
+!        if (lower <= r .AND. r < upper) then
+!          if ((.NOT. fgend) .AND. i == iend) then
+!            ! Here use decimal part of dish_pops to store the recom_pops matrix.
+!            ks0%dish_pops(cstat, (indion+1):) = ks0%dish_pops(cstat, (indion+1):) + 1.0_q/inp%NTRAJ
+!            fgend = .TRUE.
+!          end if
+!          cstat = i !! Hop to i
+!          exit
+!        end if
+!      end do
       !end if
     end if
 
