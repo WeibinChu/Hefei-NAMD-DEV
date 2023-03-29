@@ -331,7 +331,7 @@ contains
         end if
         call MPI_BARRIER(inp%COMMUNICATOR, ierr)
 #endif
-        tmp_pops = MOD(ks%dish_pops(:,ubd), 1.0_q)
+        tmp_pops = MOD(ks%dish_pops(:,ubd), 3.0_q)
         if (inp%IPROG == 0) then
           call printDISH(ks, olap, lbd, ubd, step=1)
           if (inp%LSPACE) call printMPDISH(ks, lbd, ubd, step=1)
@@ -452,7 +452,7 @@ contains
     allocate(dish_pops(ks%ndim, lbd:ubd))
     allocate(recom_pops(ks%ndim, lbd:ubd))
     dish_pops = NINT(ks%dish_pops(:, lbd:ubd)/3) / REAL(inp%NTRAJ, kind=q)
-    recom_pops = MOD(ks%dish_pops(:, lbd:ubd), 1.0_q)
+    recom_pops = MOD(ks%dish_pops(:, lbd:ubd), 3.0_q)
 
     if (inp%LBINOUT) then
       allocate(avgene(3, lbd:ubd)) ! tion, time, avgene

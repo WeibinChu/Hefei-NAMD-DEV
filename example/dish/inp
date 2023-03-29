@@ -15,7 +15,6 @@
   ALGO_INT   = 0
   LHOLE      = .TRUE.
   LSHP       = .TRUE.
-  NPARDISH   = 1
   LCPTXT     = .TRUE.
 
   DEBUGLEVEL = "I"
